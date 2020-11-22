@@ -561,7 +561,7 @@ const char *SysLibError() {
 #ifndef _WIN32
 	return dlerror();
 #else
-	return "not supported";
+	return NULL;
 #endif
 }
 

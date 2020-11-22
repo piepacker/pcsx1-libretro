@@ -213,10 +213,11 @@ void *plugin_link(enum builtint_plugins_e id, const char *sym)
 		if (strcmp(sym, plugin_funcs[i].name) != 0)
 			continue;
 
+		printf("plugin_link: %d %s -> %p\n", id, sym, plugin_funcs[i].func);
 		return plugin_funcs[i].func;
 	}
 
-	//fprintf(stderr, "plugin_link: missing symbol %d %s\n", id, sym);
+	fprintf(stderr, "plugin_link: missing symbol %d %s\n", id, sym);
 	return NULL;
 }
 

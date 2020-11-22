@@ -548,12 +548,7 @@ static struct retro_disk_control_callback disk_control = {
 	.add_image_index = disk_add_image_index,
 };
 
-// just in case, maybe a win-rt port in the future?
-#ifdef _WIN32
-#define SLASH '\\'
-#else
 #define SLASH '/'
-#endif
 
 static char base_dir[PATH_MAX];
 
@@ -1166,6 +1161,8 @@ void retro_run(void)
 
 static bool try_use_bios(const char *path)
 {
+	return false;
+
 	FILE *f;
 	long size;
 	const char *name;
@@ -1182,7 +1179,9 @@ static bool try_use_bios(const char *path)
 		return false;
 
 	name = strrchr(path, SLASH);
-	if (name++ == NULL)
+	printf("NAME = %s\n", name ? name : "NULL");
+	name += (name[0] != 0);
+	if (!name[0])
 		name = path;
 	snprintf(Config.Bios, sizeof(Config.Bios), "%s", name);
 	return true;
