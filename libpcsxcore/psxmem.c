@@ -80,7 +80,7 @@ retry:
 			// try to use similarly aligned memory instead
 			// (recompiler needs this)
 			mask = (addr - 1) & ~addr & 0x07ffffff;
-			addr = (unsigned long)(ret + mask) & ~mask;
+			addr = ((unsigned long)ret + mask) & ~mask;
 			tried_to_align = 1;
 			goto retry;
 		}
@@ -154,7 +154,7 @@ int psxMemInit() {
 	psxH = psxMap(0x1f800000, 0x10000, 0, MAP_TAG_OTHER);
 	psxR = psxMap(0x1fc00000, 0x80000, 0, MAP_TAG_OTHER);
 
-	if (psxMemRLUT == NULL || psxMemWLUT == NULL || 
+	if (psxMemRLUT == NULL || psxMemWLUT == NULL ||
 	    psxR == NULL || psxP == NULL || psxH == NULL) {
 		SysMessage(_("Error allocating memory!"));
 		psxMemShutdown();
