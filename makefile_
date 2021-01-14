@@ -16,7 +16,7 @@ all: target_ plugins_
 
 CC_LINK ?= $(CC)
 CC_AS ?= $(CC)
-LDFLAGS += $(MAIN_LDFLAGS)
+LDFLAGS += $(MAIN_LDFLAGS) -lstdc++
 EXTRA_LDFLAGS ?= -Wl,-Map=$@.map
 LDLIBS += $(MAIN_LDLIBS)
 ifdef PCNT

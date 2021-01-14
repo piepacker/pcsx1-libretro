@@ -36,8 +36,97 @@
 #include "sio.h"
 #include <zlib.h>
 
+#include <cstdint>
+#include <cstdio>
+#include <string>
+#include <map>
+
 extern char McdDisable[2];
 
+static bool s_suppress_spam = 0;
+static std::map<std::string, int> s_repeat_supress;
+
+static bool is_suppressed(const char* check) {
+    return s_suppress_spam && (++s_repeat_supress[check] > 2);
+};
+#if !defined(PSXBIOS_LOG)
+#   define PSXBIOS_LOG(...) (printf("[HLEBIOS] " __VA_ARGS__), fflush(nullptr))
+//#   define PSXBIOS_LOG(...) (void(0))
+#endif
+
+// new psxbios with signature matching PSXBIOS_LOG_SPAM.
+#if !defined(PSXBIOS_LOG_NEW)
+#   define PSXBIOS_LOG_NEW(func, ...) (printf("[HLEBIOS] " func " " __VA_ARGS__), fflush(nullptr))
+#endif
+
+#if !defined(PSXBIOS_LOG_SPAM)
+#   define PSXBIOS_LOG_SPAM(func, ...) ( !is_suppressed(func) && (printf("[HLEBIOS] " func " " __VA_ARGS__), fflush(nullptr), 1))
+#endif
+
+#define HLE_FULL                1       // enables full ROM-less HLE support
+
+// HLE exception handler depends on full HLE (everything in the list has to be 1)
+#define HLE_ENABLE_EXCEPTION    (HLE_FULL && 1)
+
+// Dev notes:
+//  * Tekken 2/3 do not use threads
+//  * Tekken 2/3 do not use root counters (rcnt)
+//  * Tekken 2/3 do not use the Event system (DeliverEvent, etc)
+//  * Tekken 2/3 do not use GPU APIs
+
+#define HLE_ENABLE_HEAP         (HLE_FULL || 1)
+#define HLE_ENABLE_GPU			(HLE_FULL || 1)
+#define HLE_ENABLE_RCNT			(HLE_FULL || 1)
+
+// Rest of these are not useful due to interdependence on exception handler and full hle.
+
+#define HLE_ENABLE_THREAD       (HLE_FULL || 1)
+#define HLE_ENABLE_MCD			(HLE_FULL || 1)
+#define HLE_ENABLE_EVENT        (HLE_FULL || 1)
+#define HLE_ENABLE_LOADEXEC		(HLE_FULL || 1)       // depends on ISO9660 filesystem API
+
+#define HLE_ENABLE_FILEIO		(HLE_FULL && 1)       // fileio depends on HLE memcard ?
+#define HLE_ENABLE_PAD			(HLE_FULL && 1)
+#define HLE_ENABLE_ENTRYINT     (HLE_FULL && 1)
+
+#define HLE_ENABLE_FINDFILE     (HLE_FULL && 0)
+#define HLE_ENABLE_FORMAT       (HLE_FULL && 0)
+
+
+// qsort needs to be rewritten before it can be enabled. And once rewritten, probably can remove
+// the conditional build for it.. no good reason to disable it except right now it doesn't build --jstine
+
+#define HLE_ENABLE_QSORT        0
+
+static bool hle_config_get_bool(std::string opt) {
+    auto woo = "PSX_HLE_CONFIG_" + opt;
+    if (const char* const env = getenv(woo.c_str())) {
+        auto walk = env;
+        while(isspace(int(walk[0]))) ++walk;
+        char bval = walk[0];
+        while(isspace(int(walk[0]))) ++walk;
+
+        if (!env[0] || env[1] || !isdigit(int(bval))) {
+            fprintf(stderr, "env parse error at %s=%s\nValid boolean expressions are 0 or 1\n", woo.c_str(), env);
+        }
+
+        if (bval == '0') return 0;
+        return 1;       // any non-zero value is boolean true
+    }
+    return 0;
+}
+
+static bool hle_config_env_rcnt		() { return hle_config_get_bool("RCNT"      ); }
+static bool hle_config_env_pad		() { return hle_config_get_bool("PAD"       ); }
+static bool hle_config_env_fileio	() { return hle_config_get_bool("FILEIO"    ); }
+static bool hle_config_env_mcd		() { return hle_config_get_bool("MCD"       ); }
+static bool hle_config_env_loadexec	() { return hle_config_get_bool("LOADEXEC"  ); }
+static bool hle_config_env_gpu		() { return hle_config_get_bool("GPU"       ); }
+static bool hle_config_env_thread   () { return hle_config_get_bool("THREAD"    ); }
+static bool hle_config_env_entryint () { return hle_config_get_bool("ENTRYINT"  ); }
+static bool hle_config_env_heap     () { return hle_config_get_bool("HEAP"      ); }
+static bool hle_config_env_event    () { return hle_config_get_bool("EVENT"     ); }
+static bool hle_config_env_full     () { return hle_config_get_bool("FULL"      ); }
 #undef SysPrintf
 #define SysPrintf(...)   (printf(__VA_ARGS__), fflush(NULL))
 
@@ -1543,7 +1632,7 @@ void psxBios__96_remove() { // 72
 }
 
 void psxBios_SetMem() { // 9f
-	u32 new = psxHu32(0x1060);
+	u32 pnew = psxHu32(0x1060);
 
 #ifdef PSXBIOS_LOG
 	PSXBIOS_LOG("psxBios_%s: %x, %x\n", biosA0n[0x9f], a0, a1);
@@ -1551,13 +1640,13 @@ void psxBios_SetMem() { // 9f
 
 	switch(a0) {
 		case 2:
-			psxHu32ref(0x1060) = SWAP32(new);
+			psxHu32ref(0x1060) = SWAP32(pnew);
 			psxMu32ref(0x060) = a0;
 			SysPrintf("Change effective memory : %d MBytes\n",a0);
 			break;
 
 		case 8:
-			psxHu32ref(0x1060) = SWAP32(new | 0x300);
+			psxHu32ref(0x1060) = SWAP32(pnew | 0x300);
 			psxMu32ref(0x060) = a0;
 			SysPrintf("Change effective memory : %d MBytes\n",a0);
 
@@ -2051,7 +2140,7 @@ static void buopen(int mcd, char *ptr, char *cfg)
 	}
 	if (a1 & 0x200 && v0 == -1) { /* FCREAT */
 		for (i=1; i<16; i++) {
-			int j, xor, nblk = a1 >> 16;
+			int j, xorx, nblk = a1 >> 16;
 			char *pptr, *fptr2;
 			char *fptr = mcd_data + 128 * i;
 
@@ -2074,16 +2163,16 @@ static void buopen(int mcd, char *ptr, char *cfg)
 					fptr2[0] = j < nblk ? 0x52 : 0x53;
 					pptr[8] = i - 1;
 					pptr[9] = 0;
-					for (k=0, xor=0; k<127; k++) xor^= pptr[k];
-					pptr[127] = xor;
+					for (k=0, xorx=0; k<127; k++) xorx^= pptr[k];
+					pptr[127] = xorx;
 					pptr = fptr2;
 					break;
 				}
 				/* shouldn't this return ENOSPC if i == 16? */
 			}
 			pptr[8] = pptr[9] = 0xff;
-			for (j=0, xor=0; j<127; j++) xor^= pptr[j];
-			pptr[127] = xor;
+			for (j=0, xorx=0; j<127; j++) xorx^= pptr[j];
+			pptr[127] = xorx;
 			SysPrintf("openC %s %d\n", ptr, nblk);
 			v0 = 1 + mcd;
 			/* just go ahead and resave them all */
@@ -2099,7 +2188,7 @@ static void buopen(int mcd, char *ptr, char *cfg)
  */
 
 void psxBios_open() { // 0x32
-	void *pa0 = Ra0;
+	auto *pa0 = Ra0;
 
 #ifdef PSXBIOS_LOG
 	PSXBIOS_LOG("psxBios_%s: %s,%x\n", biosB0n[0x32], Ra0, a1);
@@ -2177,7 +2266,7 @@ void psxBios_read() { // 0x34
 
 void psxBios_write() { // 0x35/0x03
 	char *ptr;
-	void *pa1 = Ra1;
+	auto *pa1 = Ra1;
 
 #ifdef PSXBIOS_LOG
 	PSXBIOS_LOG("psxBios_%s: %x,%x,%x\n", biosB0n[0x35], a0, a1, a2);
@@ -2277,7 +2366,7 @@ static size_t strlen_internal(char* p)
 
 void psxBios_firstfile() { // 42
 	struct DIRENTRY *dir = (struct DIRENTRY *)Ra1;
-	void *pa0 = Ra0;
+	auto *pa0 = Ra0;
 	u32 _dir = a1;
 	char *ptr;
 	int i;
@@ -2335,15 +2424,15 @@ void psxBios_nextfile() { // 43
 
 #define burename(mcd) { \
 	for (i=1; i<16; i++) { \
-		int namelen, j, xor = 0; \
+		int namelen, j, xorx = 0; \
 		ptr = Mcd##mcd##Data + 128 * i; \
 		if ((*ptr & 0xF0) != 0x50) continue; \
 		if (strcmp(Ra0+5, ptr+0xa)) continue; \
 		namelen = strlen(Ra1+5); \
 		memcpy(ptr+0xa, Ra1+5, namelen); \
 		memset(ptr+0xa+namelen, 0, 0x75-namelen); \
-		for (j=0; j<127; j++) xor^= ptr[j]; \
-		ptr[127] = xor; \
+		for (j=0; j<127; j++) xorx^= ptr[j]; \
+		ptr[127] = xorx; \
 		SaveMcd(Config.Mcd##mcd, Mcd##mcd##Data, 128 * i + 0xa, 0x76); \
 		v0 = 1; \
 		break; \
@@ -2355,8 +2444,8 @@ void psxBios_nextfile() { // 43
  */
 
 void psxBios_rename() { // 44
-	void *pa0 = Ra0;
-	void *pa1 = Ra1;
+	auto *pa0 = Ra0;
+	auto *pa1 = Ra1;
 	char *ptr;
 	int i;
 
@@ -2398,7 +2487,7 @@ void psxBios_rename() { // 44
  */
 
 void psxBios_delete() { // 45
-	void *pa0 = Ra0;
+	auto *pa0 = Ra0;
 	char *ptr;
 	int i;
 
@@ -3019,7 +3108,7 @@ void psxBiosInit() {
 /**/
 	base = 0x1000;
 	size = sizeof(EvCB) * 32;
-	EventCB = (void *)&psxR[base]; base += size * 6;
+	EventCB = (EvCB *)&psxR[base]; base += size * 6;
 	memset(EventCB, 0, size * 6);
 	HwEV = EventCB;
 	EvEV = EventCB + 32;
