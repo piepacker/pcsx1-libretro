@@ -49,6 +49,7 @@ static std::map<std::string, int> s_repeat_supress;
 static bool is_suppressed(const char* check) {
     return s_suppress_spam && (++s_repeat_supress[check] > 2);
 };
+
 #if !defined(PSXBIOS_LOG)
 #   define PSXBIOS_LOG(...) (printf("[HLEBIOS] " __VA_ARGS__), fflush(nullptr))
 //#   define PSXBIOS_LOG(...) (void(0))
@@ -130,9 +131,7 @@ static bool hle_config_env_full     () { return hle_config_get_bool("FULL"      
 #undef SysPrintf
 #define SysPrintf(...)   (printf(__VA_ARGS__), fflush(NULL))
 
-#define PSXBIOS_LOG(...) (printf(__VA_ARGS__), fflush(NULL))
-
-char *biosA0n[256] = {
+const char * const biosA0n[256] = {
 // 0x00
 	"open",		"lseek",	"read",		"write",
 	"close",	"ioctl",	"exit",		"sys_a0_07",
@@ -193,7 +192,7 @@ char *biosA0n[256] = {
 	"?? sub_function",
 };
 
-char *biosB0n[256] = {
+const char * const biosB0n[256] = {
 // 0x00
 	"SysMalloc",		"sys_b0_01",	"sys_b0_02",	"sys_b0_03",
 	"sys_b0_04",		"sys_b0_05",	"sys_b0_06",	"DeliverEvent",
@@ -226,7 +225,7 @@ char *biosB0n[256] = {
 	"_card_status",		"_card_wait",
 };
 
-char *biosC0n[256] = {
+const char * const biosC0n[256] = {
 // 0x00
 	"InitRCnt",			  "InitException",		"SysEnqIntRP",		"SysDeqIntRP",
 	"get_free_EvCB_slot", "get_free_TCB_slot",	"ExceptionHandler",	"InstallExeptionHandler",
