@@ -3421,74 +3421,99 @@ void psxBiosInitFull() {
 	pad_buf1len = pad_buf2len = 0;
 	CardState = -1;
 #endif
-	heap_addr = NULL;
-	heap_end = NULL;
-	heap_size = 0;
-	memset(FDesc, 0, sizeof(FDesc));
-	card_active_chan = 0;
+#if HLE_ENABLE_HEAP
+    heap_addr = NULL;
+    heap_end = NULL;
+    heap_size = 0;
+#endif
 
-	auto* ptr = (u32 *)PSXM(0x0874); // b0 table
-	ptr[0] = SWAPu32(0x4c54 - 0x884);
+#if HLE_ENABLE_MCD
+    card_active_chan = 0;
+#endif
 
-	ptr = (u32 *)PSXM(0x0674); // c0 table
-	ptr[6] = SWAPu32(0xc80);
+#if HLE_ENABLE_FILEIO
+    memset(FDesc, 0, sizeof(FDesc));
+#endif
 
-	psxMu32ref(0x0150) = SWAPu32(0x160);
-	psxMu32ref(0x0154) = SWAPu32(0x320);
-	psxMu32ref(0x0160) = SWAPu32(0x248);
-	strcpy((char *)&psxM[0x248], "bu");
-/*	psxMu32ref(0x0ca8) = SWAPu32(0x1f410004);
-	psxMu32ref(0x0cf0) = SWAPu32(0x3c020000);
-	psxMu32ref(0x0cf4) = SWAPu32(0x2442641c);
-	psxMu32ref(0x09e0) = SWAPu32(0x43d0);
-	psxMu32ref(0x4d98) = SWAPu32(0x946f000a);
-*/
-	// opcode HLE
-	(u32&)PSX_ROM_START[0x0000] = SWAPu32((0x3b << 26) | 4);
-	/* Whatever this does, it actually breaks CTR, even without the uninitiliazed memory patch.
-	Normally games shouldn't read from address 0 yet they do. See explanation below in details. */
-	//psxMu32ref(0x0000) = SWAPu32((0x3b << 26) | 0);
-	psxMu32ref(0x00a0) = SWAPu32((0x3b << 26) | 1);
-	psxMu32ref(0x00b0) = SWAPu32((0x3b << 26) | 2);
-	psxMu32ref(0x00c0) = SWAPu32((0x3b << 26) | 3);
-	psxMu32ref(0x4c54) = SWAPu32((0x3b << 26) | 0);
-	psxMu32ref(0x8000) = SWAPu32((0x3b << 26) | 5);
-	psxMu32ref(0x07a0) = SWAPu32((0x3b << 26) | 0);
-	psxMu32ref(0x0884) = SWAPu32((0x3b << 26) | 0);
-	psxMu32ref(0x0894) = SWAPu32((0x3b << 26) | 0);
+#if HLE_FULL
+    if (hle_config_env_full()) {
+        is_hle_full_mode = 1;
+        //psxFs_CacheFilesystem();
 
-	// initial stack pointer for BIOS interrupt
-	psxMu32ref(0x6c80) = SWAPu32(0x000085c8);
+        // not sure about these, the HLE seems to skip them which, I expect, is only wise
+        // if we're bypassing BIOS entirely. --jstine
 
-	// initial RNG seed
-	psxMu32ref(0x9010) = SWAPu32(0xac20cc00);
+        biosA0[0x71] = psxBios__96_init;
+        biosA0[0x72] = psxBios__96_remove;
 
-	// fonts
-	len = 0x80000 - 0x66000;
-	uncompress((Bytef *)(psxR + 0x66000), &len, font_8140, sizeof(font_8140));
-	len = 0x80000 - 0x69d68;
-	uncompress((Bytef *)(psxR + 0x69d68), &len, font_889f, sizeof(font_889f));
+        // I'm not quite sure what this is about ... it's setting up some values into B0/C0 table, so I assume
+        // it should only be performed when bypassing BIOS entirely --jstine
 
-	// memory size 2 MB
-	psxHu32ref(0x1060) = SWAPu32(0x00000b88);
+        auto* ptr = (u32 *)PSXM(0x0874); // b0 table
+        ptr[0] = SWAPu32(0x4c54 - 0x884);
 
-	hleSoftCall = FALSE;
+        ptr = (u32 *)PSXM(0x0674); // c0 table
+        ptr[6] = SWAPu32(0xc80);
 
-	/*	Some games like R-Types, CTR, Fade to Black read from adress 0x00000000 due to uninitialized pointers.
-		See Garbage Area at Address 00000000h in Nocash PSX Specfications for more information.
-		Here are some examples of games not working with this fix in place :
-		R-type won't get past the Irem logo if not implemented.
-		Crash Team Racing will softlock after the Sony logo.
-	*/
+        psxMu32ref(0x0150) = SWAPu32(0x160);
+        psxMu32ref(0x0154) = SWAPu32(0x320);
+        psxMu32ref(0x0160) = SWAPu32(0x248);
+        strcpy((char *)PSXM(0x248), "bu");
+    /*	psxMu32ref(0x0ca8) = SWAPu32(0x1f410004);
+        psxMu32ref(0x0cf0) = SWAPu32(0x3c020000);
+        psxMu32ref(0x0cf4) = SWAPu32(0x2442641c);
+        psxMu32ref(0x09e0) = SWAPu32(0x43d0);
+        psxMu32ref(0x4d98) = SWAPu32(0x946f000a);
+    */
+        // opcode HLE
+        (u32&)PSX_ROM_START[0x0000] = SWAPu32((0x3b << 26) | 4);
+        /* Whatever this does, it actually breaks CTR, even without the uninitiliazed memory patch.
+        Normally games shouldn't read from address 0 yet they do. See explanation below in details. */
+        //psxMu32ref(0x0000) = SWAPu32((0x3b << 26) | 0);
+        psxMu32ref(0x00a0) = SWAPu32((0x3b << 26) | 1);
+        psxMu32ref(0x00b0) = SWAPu32((0x3b << 26) | 2);
+        psxMu32ref(0x00c0) = SWAPu32((0x3b << 26) | 3);
+        psxMu32ref(0x4c54) = SWAPu32((0x3b << 26) | 0);
+        psxMu32ref(0x8000) = SWAPu32((0x3b << 26) | 5);
+        psxMu32ref(0x07a0) = SWAPu32((0x3b << 26) | 0);
+        psxMu32ref(0x0884) = SWAPu32((0x3b << 26) | 0);
+        psxMu32ref(0x0894) = SWAPu32((0x3b << 26) | 0);
 
-	psxMu32ref(0x0000) = SWAPu32(0x00000003);
-	/*
-	But overwritten by 00000003h after soon.
-	psxMu32ref(0x0000) = SWAPu32(0x00001A3C);
-	*/
-	psxMu32ref(0x0004) = SWAPu32(0x800C5A27);
-	psxMu32ref(0x0008) = SWAPu32(0x08000403);
-	psxMu32ref(0x000C) = SWAPu32(0x00000000);
+        // initial stack pointer for BIOS interrupt
+        psxMu32ref(0x6c80) = SWAPu32(0x000085c8);
+
+        // initial RNG seed
+        psxMu32ref(0x9010) = SWAPu32(0xac20cc00);
+
+        // fonts
+        uLongf len;
+        len = 0x80000 - 0x66000;
+        uncompress((Bytef *)(PSX_ROM_START + 0x66000), &len, font_8140, sizeof(font_8140));
+        len = 0x80000 - 0x69d68;
+        uncompress((Bytef *)(PSX_ROM_START + 0x69d68), &len, font_889f, sizeof(font_889f));
+
+        // memory size 2 MB
+        // (mednafen doesn't seem to bother to set this...)
+        //psxHu32ref(0x1060) = SWAPu32(0x00000b88);
+
+
+        /*	Some games like R-Types, CTR, Fade to Black read from adress 0x00000000 due to uninitialized pointers.
+            See Garbage Area at Address 00000000h in Nocash PSX Specfications for more information.
+            Here are some examples of games not working with this fix in place :
+            R-type won't get past the Irem logo if not implemented.
+            Crash Team Racing will softlock after the Sony logo.
+        */
+
+        psxMu32ref(0x0000) = SWAPu32(0x00000003);
+        /*
+        But overwritten by 00000003h after soon.
+        psxMu32ref(0x0000) = SWAPu32(0x00001A3C);
+        */
+        psxMu32ref(0x0004) = SWAPu32(0x800C5A27);
+        psxMu32ref(0x0008) = SWAPu32(0x08000403);
+        psxMu32ref(0x000C) = SWAPu32(0x00000000);
+    }
+#endif
 }
 
 void psxBiosShutdown() {
