@@ -3383,19 +3383,24 @@ void psxBiosInitFull() {
     //biosC0[0x1c] = psxBios_PatchAOTable;
 //************** THE END ***************************************
 /**/
+#if HLE_ENABLE_EVENT
     u32 base;
     int size;
     uLongf len;
-	base = 0x1000;
-	size = sizeof(EvCB) * 32;
-	EventCB = (EvCB *)&psxR[base]; base += size * 6;
-	memset(EventCB, 0, size * 6);
-	HwEV = EventCB;
-	EvEV = EventCB + 32;
-	RcEV = EventCB + 32 * 2;
-	UeEV = EventCB + 32 * 3;
-	SwEV = EventCB + 32 * 4;
-	ThEV = EventCB + 32 * 5;
+
+    base = 0x1000;
+    size = sizeof(EvCB) * 32;
+    EventCB = (EvCB *)(PSX_ROM_START + base); base += size * 6;
+    if (HLE_FULL) {
+        memset(EventCB, 0, size * 6);
+    }
+    HwEV = EventCB;
+    EvEV = EventCB + 32;
+    RcEV = EventCB + 32 * 2;
+    UeEV = EventCB + 32 * 3;
+    SwEV = EventCB + 32 * 4;
+    ThEV = EventCB + 32 * 5;
+#endif
 
 	memset(SysIntRP, 0, sizeof(SysIntRP));
 	memset(ThreadCB, 0, sizeof(ThreadCB));
