@@ -3522,15 +3522,18 @@ void biosInterrupt() {
 	}
 }
 
-void psxBiosException() {
+void psxBiosException80() {
 	int i;
 
-	switch (psxRegs.CP0.n.Cause & 0x3c) {
+  static const char* const exmne[16] =
+  {
+   "INT", "MOD", "TLBL", "TLBS", "ADEL", "ADES", "IBE", "DBE", "SYSCALL", "BP", "RI", "COPU", "OV", NULL, NULL, NULL
+  };
+    auto excode = (CP0_CAUSE & 0x3c) >> 2;
+    switch (excode) {
 		case 0x00: // Interrupt
 			interrupt_r26=psxRegs.CP0.n.EPC;
-#ifdef PSXCPU_LOG
 //			PSXCPU_LOG("interrupt\n");
-#endif
 			SaveRegs();
 
 			sp = psxMu32(0x6c80); // create new stack for interrupt handlers
@@ -3543,6 +3546,9 @@ void psxBiosException() {
 
 					s0 = queue[2];
 					softCall(queue[1]);
+					// FIXME: need to push current queue on the stack.
+					//assert(false);
+					//softCallYield(SCRI_biosException_Queue, queue[1]);
 				}
 			}
 
@@ -3563,45 +3569,47 @@ void psxBiosException() {
                 pc0 = ra;
                 return; 
 			}
-			psxHwWrite16(0x1f801070, 0);
+            Write_ISTAT(0);
 			break;
 
-		case 0x20: // Syscall
-#ifdef PSXCPU_LOG
-			PSXCPU_LOG("syscall exp %x\n", a0);
-#endif
+        case 0x08: // Syscall
+            PSXBIOS_LOG("syscall exp %x\n", a0);
 			switch (a0) {
 				case 1: // EnterCritical - disable irq's
 					/* Fixes Medievil 2 not loading up new game, Digimon World not booting up and possibly others */
-					v0 = (psxRegs.CP0.n.Status & 0x404) == 0x404;
-					psxRegs.CP0.n.Status &= ~0x404;
+                    v0 = (CP0_STATUS & 0x404) == 0x404;
+                    CP0_STATUS &= ~0x404; 
 					break;
 
 				case 2: // ExitCritical - enable irq's
-					psxRegs.CP0.n.Status |= 0x404;
+                    CP0_STATUS |= 0x404; 
 					break;
 				/* Normally this should cover SYS(00h, SYS(04h but they don't do anything relevant so... */
 				default:
 					break;
 			}
-			pc0 = psxRegs.CP0.n.EPC + 4;
+            pc0 = CP0_EPC + 4;
 
-			psxRegs.CP0.n.Status = (psxRegs.CP0.n.Status & 0xfffffff0) |
-								  ((psxRegs.CP0.n.Status & 0x3c) >> 2);
+            CP0_STATUS = (CP0_STATUS & 0xfffffff0) |
+                        ((CP0_STATUS & 0x3c) >> 2);
 			return;
 
+        case 0xa:  // Reserved instruction exception
+            assert(false);
+        break;
+        case 0xb:  // Reserved instruction exception
+            assert(false);
+        break;
 		default:
-#ifdef PSXCPU_LOG
-			PSXCPU_LOG("unknown bios exception!\n");
-#endif
+            PSXBIOS_LOG("unknown bios exception 0x%x (%s)\n", excode, exmne[excode]);
 			break;
 	}
 
-	pc0 = psxRegs.CP0.n.EPC;
-	if (psxRegs.CP0.n.Cause & 0x80000000) pc0+=4;
+    pc0 = CP0_EPC;
+    if (CP0_CAUSE & 0x80000000) pc0+=4;
 
-	psxRegs.CP0.n.Status = (psxRegs.CP0.n.Status & 0xfffffff0) |
-						  ((psxRegs.CP0.n.Status & 0x3c) >> 2);
+    CP0_STATUS = (CP0_STATUS & 0xfffffff0) |
+                ((CP0_STATUS & 0x3c) >> 2);
 }
 
 #define bfreeze(ptr, size) { \
