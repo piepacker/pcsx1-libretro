@@ -237,40 +237,206 @@ const char * const biosC0n[256] = {
 	"_circputc",		  "ioabort",			"sys_c0_1a",		"KernelRedirect",
 	"PatchAOTable",
 };
+#define HLE_MEDNAFEN_IFC 0
+#define HLE_PCSX_IFC     1
 
-//#define r0 (psxRegs.GPR.n.r0)
-#define at (psxRegs.GPR.n.at)
-#define v0 (psxRegs.GPR.n.v0)
-#define v1 (psxRegs.GPR.n.v1)
-#define a0 (psxRegs.GPR.n.a0)
-#define a1 (psxRegs.GPR.n.a1)
-#define a2 (psxRegs.GPR.n.a2)
-#define a3 (psxRegs.GPR.n.a3)
-#define t0 (psxRegs.GPR.n.t0)
-#define t1 (psxRegs.GPR.n.t1)
-#define t2 (psxRegs.GPR.n.t2)
-#define t3 (psxRegs.GPR.n.t3)
-#define t4 (psxRegs.GPR.n.t4)
-#define t5 (psxRegs.GPR.n.t5)
-#define t6 (psxRegs.GPR.n.t6)
-#define t7 (psxRegs.GPR.n.t7)
-#define t8 (psxRegs.GPR.n.t8)
-#define t9 (psxRegs.GPR.n.t9)
-#define s0 (psxRegs.GPR.n.s0)
-#define s1 (psxRegs.GPR.n.s1)
-#define s2 (psxRegs.GPR.n.s2)
-#define s3 (psxRegs.GPR.n.s3)
-#define s4 (psxRegs.GPR.n.s4)
-#define s5 (psxRegs.GPR.n.s5)
-#define s6 (psxRegs.GPR.n.s6)
-#define s7 (psxRegs.GPR.n.s7)
-#define k0 (psxRegs.GPR.n.k0)
-#define k1 (psxRegs.GPR.n.k1)
-#define gp (psxRegs.GPR.n.gp)
-#define sp (psxRegs.GPR.n.sp)
-#define fp (psxRegs.GPR.n.s8)
-#define ra (psxRegs.GPR.n.ra)
+#if HLE_PCSX_IFC
+#define PSX_RAM_START (psxM)
+#define PSX_ROM_START (psxR)
+
+#define GPR_ARRAY (psxRegs.GPR.r)
 #define pc0 (psxRegs.pc)
+#define lo  (psxRegs.GPR.n.lo)
+#define hi  (psxRegs.GPR.n.hi)
+
+#define CP0_EPC      (psxRegs.CP0.n.EPC	  )
+#define CP0_CAUSE    (psxRegs.CP0.n.Cause   )
+#define CP0_STATUS   (psxRegs.CP0.n.Status  )
+#endif
+
+#if HLE_MEDNAFEN_IFC
+#include "mednafen/psx/psx.h"
+
+#define PSX_RAM_START (MainRAM->data8)
+#define PSX_ROM_START (BIOSROM->data8)
+
+#define GPR_ARRAY (PSX_CPU->GPR)
+#define pc0 (PSX_CPU->BACKED_PC)
+#define lo  (PSX_CPU->LO)
+#define hi  (PSX_CPU->HI)
+
+#define CP0_EPC      (PSX_CPU->CP0.EPC	  )
+#define CP0_CAUSE    (PSX_CPU->CP0.CAUSE  )
+#define CP0_STATUS   (PSX_CPU->CP0.SR     )
+#endif
+
+//#define zr (GPR_ARRAY[0])
+#define at (GPR_ARRAY[1])
+#define v0 (GPR_ARRAY[2])
+#define v1 (GPR_ARRAY[3])
+#define a0 (GPR_ARRAY[4])
+#define a1 (GPR_ARRAY[5])
+#define a2 (GPR_ARRAY[6])
+#define a3 (GPR_ARRAY[7])
+#define t0 (GPR_ARRAY[8])
+#define t1 (GPR_ARRAY[9])
+#define t2 (GPR_ARRAY[10])
+#define t3 (GPR_ARRAY[11])
+#define t4 (GPR_ARRAY[12])
+#define t5 (GPR_ARRAY[13])
+#define t6 (GPR_ARRAY[14])
+#define t7 (GPR_ARRAY[15])
+#define t8 (GPR_ARRAY[16])
+#define t9 (GPR_ARRAY[17])
+#define s0 (GPR_ARRAY[18])
+#define s1 (GPR_ARRAY[19])
+#define s2 (GPR_ARRAY[20])
+#define s3 (GPR_ARRAY[21])
+#define s4 (GPR_ARRAY[22])
+#define s5 (GPR_ARRAY[23])
+#define s6 (GPR_ARRAY[24])
+#define s7 (GPR_ARRAY[25])
+#define k0 (GPR_ARRAY[26])
+#define k1 (GPR_ARRAY[27])
+#define gp (GPR_ARRAY[28])
+#define sp (GPR_ARRAY[29])
+#define fp (GPR_ARRAY[30])
+#define ra (GPR_ARRAY[31])
+
+static const uint32_t PS1_ICacheSize		= 0x00001000; // 4KB	(instruction cache)
+static const uint32_t PS1_RamPhysicalSize	= 0x00200000; // 2MB	(physical)
+static const uint32_t PS1_RamMirrorSize		= 0x00800000; // 8MB	(addressable, mirrored)
+static const uint32_t PS1_FASTRAMSIZE		= 0x00000400; // 1KB
+static const uint32_t PS1_BIOSSIZE			= 0x00080000; // 512KB
+static const uint32_t PS1_BIOSRAMSIZE		= 0x00010000; // 512KB
+static const uint32_t PS1_SegmentAddrMask	= 0x1fffffff; // masks away all segment information, useful since most emu operations don't need to care
+
+static const uint32_t PS1_FastRamStart		= 0x1f800000;
+static const uint32_t PS1_FastRamEnd		= 0x1f800000 + PS1_FASTRAMSIZE;
+static const uint32_t PS1_BiosRomStart		= 0x1fc00000;
+static const uint32_t PS1_BiosRomEnd		= 0x1fc00000 + PS1_BIOSSIZE;
+
+
+
+#if HLE_PCSX_IFC
+#define RCNT_SetCount(rid, val)     psxRcntWcount (rid, val)
+#define RCNT_SetMode(rid, val)      psxRcntWtarget(rid, val)
+#define RCNT_SetTarget(rid, val)    psxRcntWtarget(rid, val)
+#define RCNT_GetCount(rid)          psxRcntRcount (rid)
+#define RCNT_GetMode(rid)           psxRcntRtarget(rid)
+#define RCNT_GetTarget(rid)         psxRcntRtarget(rid)
+#endif
+
+
+#if HLE_MEDNAFEN_IFC
+#include "mednafen/psx/timer.h"
+
+#define RCNT_SetCount(rid, val)    TIMER_Write(0, ((rid) << 4) | 0x00, val)
+#define RCNT_SetMode(rid, val)     TIMER_Write(0, ((rid) << 4) | 0x04, val)
+#define RCNT_SetTarget(rid, val)   TIMER_Write(0, ((rid) << 4) | 0x08, val)
+#define RCNT_GetCount(rid)         TIMER_Read (0, ((rid) << 4) | 0x00)
+#define RCNT_GetMode(rid)          TIMER_Read (0, ((rid) << 4) | 0x04)
+#define RCNT_GetTarget(rid)        TIMER_Read (0, ((rid) << 4) | 0x08)
+#endif
+
+
+// IRQ_Write / IRQ_Read
+#if HLE_PCSX_IFC
+static void Write_ISTAT(u32 val) { psxHwWrite32(0x1f801070, val); }
+static void Write_IMASK(u32 val) { psxHwWrite32(0x1f801074, val); }
+static u32 Read_ISTAT() { return psxHu32(0x1f801070); }
+static u32 Read_IMASK() { return psxHu32(0x1f801074); }
+#endif
+
+#if HLE_MEDNAFEN_IFC
+//  Weird APIs by Mednafen here... They take an address input, but only care about the 4 LSBs.
+//  They are meant for accessing 0x1070 (ISTAT) and 0x1074 (IMASK) in the hardware register map.
+//  I like to search on 1070 and 1074 in PSX emulators since it's a common pattern when
+//  looking for ISTAT and IMASK, so I used those addresses in the function call helpers.. --jstine
+
+// BUGGED? note that IRQ_Write and IRQ_Read as implemented by Mednafen are dodgy.
+//   IRQ_Write is missing masking operations on MASK.
+//   IRQ_Read is injecting random garbage on writes to unaligned addresses (1071, 1072, etc).
+//     (fortunately writes to those addresses are rare or impossible, real HW ignored them --jstine).
+
+static void Write_ISTAT(u32 val) { IRQ_Write(0x1070, val); }
+static void Write_IMASK(u32 val) { IRQ_Write(0x1074, val); }
+static u32 Read_ISTAT() { return IRQ_Read(0x1070); }
+static u32 Read_IMASK() { return IRQ_Read(0x1074); }
+#endif
+
+#if HLE_PCSX_IFC
+void VmcWriteNV(int port, int slot, const void* src, int size) {
+    assert((u32)port < 2);
+    auto* dest = port ? Mcd2Data : Mcd1Data;
+    memcpy(dest + a1 * 128, (uint8_t*)src, 128);
+    SaveMcd(port ? Config.Mcd2 : Config.Mcd1, dest, a1 * 128, 128);
+}
+
+bool VmcEnabled(int port, int slot) {
+    assert((u32)port < 2);
+    return !McdDisable[port];
+}
+#endif
+
+#if HLE_MEDNAFEN_IFC && HLE_ENABLE_MCD
+#include "mednafen/psx/frontio.h"
+extern FrontIO *PSX_FIO;        // defined by libretro. dunno why this isn't baked into the PSX core for mednafen. --jstine
+void VmcWriteNV(int port, int slot, const void* src, int offset, int size) {
+    assert((u32)port < 2);
+    if (auto mcd = PSX_FIO->GetMemcardDevice(port))
+        mcd->WriteNV((const uint8_t*)src, offset, size);
+}
+
+void VmcReadNV(int port, int slot, void* dest, int offset, int size) {
+    assert((u32)port < 2);
+    if (auto mcd = PSX_FIO->GetMemcardDevice(port))
+        mcd->ReadNV((uint8_t*)dest, offset, size);
+}
+
+bool VmcEnabled(int port, int slot) {
+    assert((u32)port < 2);
+    if (auto mcd = PSX_FIO->GetMemcardDevice(port)) {
+        return 1;
+    }
+
+    return 0;
+}
+#endif
+
+#if HLE_MEDNAFEN_IFC
+static u8* PSXM(u32 unmasked) {
+    auto masked = unmasked & 0x1fff'ffff;
+
+    u8* mem_ = MainRAM->data8;
+
+    if (masked < PS1_RamMirrorSize) {
+        return MainRAM->data8 + (masked & (PS1_RamPhysicalSize - 1));
+    }
+    else if (masked >= 0x1f800000 && masked < (0x1f800000 + PS1_FASTRAMSIZE)) {
+        return ScratchRAM->data8 + (masked-0x1f800000);
+    }
+    else if (masked >= 0x1fc00000 && masked < (0x1fc00000 + PS1_BIOSSIZE)) {
+        return BIOSROM->data8 + (masked-0x1fc00000);
+    }
+    else {
+        assert(false);
+    }
+    //else if (auto* entry = ioHandlers_[HASH_IOADDR(addr)]) {
+    //	return entry->ioRead32(addr);
+    //}
+
+    return MainRAM->data8 + masked;
+}
+
+static u32& psxMu32ref(u32 addr) {
+    return (u32&)*PSXM(addr);
+}
+
+static u32 psxMu32(u32 addr) {
+    return *(u32*)PSXM(addr);
+}
+#endif
 
 #define Ra0 ((char *)PSXM(a0))
 #define Ra1 ((char *)PSXM(a1))
@@ -280,11 +446,93 @@ const char * const biosC0n[256] = {
 #define Rsp ((char *)PSXM(sp))
 
 typedef struct {
-	u32 desc;
-	s32 status;
-	s32 mode;
-	u32 fhandler;
+    u32 desc;
+    s32 status;
+    s32 mode;
+    u32 fhandler;
 } EvCB[32];
+
+#define EvStUNUSED	0x0000
+#define EvStWAIT	0x1000
+#define EvStACTIVE	0x2000
+#define EvStALREADY 0x4000
+
+#define EvMdINTR	0x1000
+#define EvMdNOINTR	0x2000
+
+/*
+typedef struct {
+    s32 next;
+    s32 func1;
+    s32 func2;
+    s32 pad;
+} SysRPst;
+*/
+
+typedef struct {
+    s32 status;
+    s32 mode;
+    u32 reg[32];
+    u32 func;
+} TCB;
+
+struct DIRENTRY {
+    char name[20];
+    s32 attr;
+    s32 size;
+    u32 next;
+    s32 head;
+    char system[4];
+};
+
+typedef struct {
+    char name[32];
+    u32  mode;
+    u32  offset;
+    u32  size;
+    u32  mcfile;
+} FileDesc;
+
+#if HLE_ENABLE_ENTRYINT
+static u32 jmp_int = 0;     // mips address
+static u32 SysIntRP[8];
+#endif
+
+#if HLE_ENABLE_PAD || HLE_FULL
+static int *pad_buf = NULL;
+static char *pad_buf1 = NULL, *pad_buf2 = NULL;
+static int pad_buf1len, pad_buf2len;
+static int pad_stopped = 1;
+#endif
+
+#if HLE_ENABLE_MCD
+static int CardState = -1;
+static u32 card_active_chan;
+#endif
+
+static u32 regs[36];
+
+#if HLE_ENABLE_EVENT
+static EvCB *EventCB;
+static EvCB *HwEV; // 0xf0
+static EvCB *EvEV; // 0xf1
+static EvCB *RcEV; // 0xf2
+static EvCB *UeEV; // 0xf3
+static EvCB *SwEV; // 0xf4
+static EvCB *ThEV; // 0xff
+#endif
+
+#if HLE_ENABLE_THREAD
+static TCB ThreadCB[8];
+static int CurThread = 0;
+#endif
+
+#if HLE_ENABLE_HEAP
+static u32 heap_size = 0;
+static u32 *heap_addr = NULL;
+static u32 *heap_end = NULL;
+#endif
+
 
 #define EvStUNUSED	0x0000
 #define EvStWAIT	0x1000
@@ -304,13 +552,6 @@ typedef struct {
 */
 
 typedef struct {
-	s32 status;
-	s32 mode;
-	u32 reg[32];
-	u32 func;
-} TCB;
-
-typedef struct {
 	u32 _pc0;
 	u32 gp0;
 	u32 t_addr;
@@ -324,46 +565,7 @@ typedef struct {
 	u32 _sp, _fp, _gp, ret, base;
 } EXEC;
 
-struct DIRENTRY {
-	char name[20];
-	s32 attr;
-	s32 size;
-	u32 next;
-	s32 head;
-	char system[4];
-};
-
-typedef struct {
-	char name[32];
-	u32  mode;
-	u32  offset;
-	u32  size;
-	u32  mcfile;
-} FileDesc;
-
-static u32 *jmp_int = NULL;
-static int *pad_buf = NULL;
-static char *pad_buf1 = NULL, *pad_buf2 = NULL;
-static int pad_buf1len, pad_buf2len;
-static int pad_stopped = 0;
-
-static u32 regs[35];
-static EvCB *EventCB;
-static EvCB *HwEV; // 0xf0
-static EvCB *EvEV; // 0xf1
-static EvCB *RcEV; // 0xf2
-static EvCB *UeEV; // 0xf3
-static EvCB *SwEV; // 0xf4
-static EvCB *ThEV; // 0xff
-static u32 heap_size = 0;
-static u32 *heap_addr = NULL;
-static u32 *heap_end = NULL;
-static u32 SysIntRP[8];
-static int CardState = -1;
-static TCB ThreadCB[8];
-static int CurThread = 0;
 static FileDesc FDesc[32];
-static u32 card_active_chan = 0;
 
 boolean hleSoftCall = FALSE;
 
@@ -402,17 +604,30 @@ static inline void DeliverEvent(u32 ev, u32 spec) {
 
 static unsigned interrupt_r26=0x8004E8B0;
 
+static bool s_saved = 0;
+
 static inline void SaveRegs() {
-	memcpy(regs, psxRegs.GPR.r, 32*4);
-	regs[32] = psxRegs.GPR.n.lo;
-	regs[33] = psxRegs.GPR.n.hi;
-	regs[34] = psxRegs.pc;
+    assert(!s_saved);
+    s_saved = 1;
+    memcpy(regs, GPR_ARRAY, sizeof(GPR_ARRAY));
+#if HLE_MEDNAFEN_IFC
+    regs[33] = lo;
+    regs[34] = hi;
+#endif
+
+    regs[35] = pc0;
+
+    interrupt_r26 = CP0_EPC;
 }
 
 static inline void LoadRegs() {
-	memcpy(psxRegs.GPR.r, regs, 32*4);
-	psxRegs.GPR.n.lo = regs[32];
-	psxRegs.GPR.n.hi = regs[33];
+    assert(s_saved);
+    s_saved = 0;
+    memcpy(GPR_ARRAY, regs, sizeof(GPR_ARRAY));
+#if HLE_MEDNAFEN_IFC
+    lo = regs[33];
+    hi = regs[34];
+#endif
 }
 
 /*                                           *
@@ -2081,20 +2296,16 @@ void psxBios_ReturnFromException() { // 17
 }
 
 void psxBios_ResetEntryInt() { // 18
-#ifdef PSXBIOS_LOG
 	PSXBIOS_LOG("psxBios_%s\n", biosB0n[0x18]);
-#endif
 
-	jmp_int = NULL;
+	jmp_int = 0;
 	pc0 = ra;
 }
 
 void psxBios_HookEntryInt() { // 19
-#ifdef PSXBIOS_LOG
 	PSXBIOS_LOG("psxBios_%s\n", biosB0n[0x19]);
-#endif
 
-	jmp_int = (u32*)Ra0;
+	jmp_int = a0;
 	pc0 = ra;
 }
 
@@ -2105,9 +2316,7 @@ void psxBios_UnDeliverEvent() { // 0x20
 	GetEv();
 	GetSpec();
 
-#ifdef PSXBIOS_LOG
 	PSXBIOS_LOG("psxBios_%s %x,%x\n", biosB0n[0x20], ev, spec);
-#endif
 
 	if (EventCB[ev][spec].status == EvStALREADY &&
 		EventCB[ev][spec].mode == EvMdNOINTR)
@@ -3127,7 +3336,7 @@ void psxBiosInit() {
 	ThreadCB[0].status = 2; // main thread
 
 	pad_stopped = 1;
-	jmp_int = NULL;
+	jmp_int = 0;
 	pad_buf = NULL;
 	pad_buf1 = NULL;
 	pad_buf2 = NULL;
@@ -3151,7 +3360,7 @@ void psxBiosInit() {
 	psxMu32ref(0x4d98) = SWAPu32(0x946f000a);
 */
 	// opcode HLE
-	psxRu32ref(0x0000) = SWAPu32((0x3b << 26) | 4);
+	(u32&)PSX_ROM_START[0x0000] = SWAPu32((0x3b << 26) | 4);
 	/* Whatever this does, it actually breaks CTR, even without the uninitiliazed memory patch.
 	Normally games shouldn't read from address 0 yet they do. See explanation below in details. */
 	//psxMu32ref(0x0000) = SWAPu32((0x3b << 26) | 0);
@@ -3337,21 +3546,22 @@ void psxBiosException() {
 				}
 			}
 
-			if (jmp_int != NULL) {
-				int i;
+            if (jmp_int) {
+                uint32_t* jmpptr = (uint32_t*)PSXM(jmp_int);
+				int jmp_addr = (s8*)jmpptr - PSX_RAM_START;
+                //PSXBIOS_LOG("jmp_int @ %08x - ra=%08x sp=%08x fp=%08x\n", jmp_addr, jmpptr[0], jmpptr[1], jmpptr[2]);
+                Write_ISTAT(0xffffffff);
 
-				psxHwWrite32(0x1f801070, 0xffffffff);
+                ra = jmpptr[0];
+                sp = jmpptr[1];
+                fp = jmpptr[2];
+                for (int i = 0; i < 8; i++) // s0-s7
+                     GPR_ARRAY[16 + i] = jmpptr[3 + i];
+                gp = jmpptr[11];
 
-				ra = jmp_int[0];
-				sp = jmp_int[1];
-				fp = jmp_int[2];
-				for (i = 0; i < 8; i++) // s0-s7
-					 psxRegs.GPR.r[16 + i] = jmp_int[3 + i];
-				gp = jmp_int[11];
-
-				v0 = 1;
-				pc0 = ra;
-				return;
+                v0 = 1;
+                pc0 = ra;
+                return; 
 			}
 			psxHwWrite16(0x1f801070, 0);
 			break;
@@ -3417,7 +3627,7 @@ void psxBiosException() {
 void psxBiosFreeze(int Mode) {
 	u32 base = 0x40000;
 
-	bfreezepsxMptr(jmp_int, u32);
+	//bfreezepsxMptr(jmp_int, u32);
 	bfreezepsxMptr(pad_buf, int);
 	bfreezepsxMptr(pad_buf1, char);
 	bfreezepsxMptr(pad_buf2, char);
