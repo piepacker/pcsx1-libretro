@@ -318,7 +318,6 @@ static const uint32_t PS1_BiosRomStart		= 0x1fc00000;
 static const uint32_t PS1_BiosRomEnd		= 0x1fc00000 + PS1_BIOSSIZE;
 
 
-
 #if HLE_PCSX_IFC
 #define RCNT_SetCount(rid, val)     psxRcntWcount (rid, val)
 #define RCNT_SetMode(rid, val)      psxRcntWtarget(rid, val)
@@ -535,23 +534,6 @@ static u32 *heap_end = NULL;
 #endif
 
 
-#define EvStUNUSED	0x0000
-#define EvStWAIT	0x1000
-#define EvStACTIVE	0x2000
-#define EvStALREADY 0x4000
-
-#define EvMdINTR	0x1000
-#define EvMdNOINTR	0x2000
-
-/*
-typedef struct {
-    s32 next;
-    s32 func1;
-    s32 func2;
-    s32 pad;
-} SysRPst;
-*/
-
 typedef struct {
     u32 _pc0;
     u32 gp0;
@@ -568,7 +550,122 @@ typedef struct {
 
 static FileDesc FDesc[32];
 
-boolean hleSoftCall = FALSE;
+// oh silly PCSX. they did the classic VM nono and just recursively called the interpreter
+// in order to emulate softCalls. A miracle this ever worked.
+// For our purposes in Mednafen, we need to do things properly, which means setting up the
+// VM state and then exiting the current C code, and resuming C code (via special hook)
+// after the interpreter has done its part.
+
+uint8_t hleSoftCall = FALSE;      // commented out because nesting interpreter is very uncool. --jstine
+
+// Pick an unmapped area of PSX memory to treat as soft call return address.
+static const u32 kSoftCallBaseRetAddr = 0x8100'0000;
+
+enum SoftCallReturnId {
+    SCRI_None = 0,
+
+    SCRI_DeliverEvent_Resume,
+
+    SCRI_psxBios_DeliverEvent_00,
+
+    SCRI_psxBios__bu_init_00,
+    SCRI_psxBios__bu_init_01,
+    SCRI_psxBios__bu_init_02,
+
+    SCRI_psxBios__card_load_00,
+    SCRI_psxBios__card_info_00,
+
+    SCRI_psxBios__card_read_00,
+    SCRI_psxBios__card_write_00,
+
+    SCRI_MAX_COUNT
+};
+
+// Proper SoftCall:
+//  * save the current value of $ra onto the stack.
+//  * set a special return address that identifies our HLE function and it's current yield state
+//  * when the return address is detected from CPU, it bounces through HLE and resumes state
+//    machine execution -- pops old $ra off the stack.
+//
+// Using the VM's stack machine is of critical importance to ensure proper handling of thread
+// context switching which may occur during open-ended execution of interpreter.
+
+// Pedantic: the PSX expects 16 bytes of shadow space below the current callstack.
+//   Mostly things work without this, because it was only meant for use by debug builds to shadow values
+//   passd by register ($a0 -> $a4).  --jstine
+
+static void StackPush(u32 val) {
+    sp -= 4;
+    psxMu32ref(sp) = val;
+}
+
+static void StackPop(u32& val) {
+    val = psxMu32ref(sp);
+    sp += 4;
+}
+
+static SoftCallReturnId softCallYield(SoftCallReturnId id, u32 pc) {
+    StackPush(ra);
+    sp -= 0x10;     // shadow space (see notes earlier)
+
+    // perform equivalent of JAL -- update $ra and set PC.
+    ra = kSoftCallBaseRetAddr + (id*16);
+    pc0 = pc;
+    return id;
+}
+
+
+static void softCallResume() {
+    sp += 0x10;
+    StackPop(ra);
+}
+
+static void HleCallYield(SoftCallReturnId id) {
+    StackPush(ra);
+    ra = kSoftCallBaseRetAddr + (id*16);
+}
+
+static void HleCallResume() {
+    StackPop(ra);
+}
+
+static bool IsHlePC(u32 pc) {
+    return ((pc & 0xff00'0000) == kSoftCallBaseRetAddr);
+}
+
+static SoftCallReturnId HleGetCallId(u32 pc) {
+    return (SoftCallReturnId)((pc - kSoftCallBaseRetAddr) / 16);
+}
+
+static bool HleYieldCheck(SoftCallReturnId id) {
+    auto pc = pc0;
+    if (IsHlePC(pc)) {
+        if (id == SCRI_None) return 0;
+        return (int)id == HleGetCallId(pc);
+    }
+    return 1;
+}
+
+#if HLE_ENABLE_EVENT
+static void HLEcb_DeliverEvent_Resume() {
+    assert (HleYieldCheck(SCRI_DeliverEvent_Resume));
+    softCallResume();
+    pc0 = ra;
+}
+
+static SoftCallReturnId DeliverEventYield(u32 ev, u32 spec) {
+    if (EventCB[ev][spec].status != EvStACTIVE) return SCRI_None;
+
+//	EventCB[ev][spec].status = EvStALREADY;
+    if (EventCB[ev][spec].mode == EvMdINTR) {
+        return softCallYield(SCRI_DeliverEvent_Resume, EventCB[ev][spec].fhandler);
+    }
+    else {
+        EventCB[ev][spec].status = EvStALREADY;
+        return SCRI_None;
+    }
+}
+#endif
 
 static inline void softCall(u32 pc) {
     pc0 = pc;
