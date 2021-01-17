@@ -3501,7 +3501,7 @@ void biosInterrupt() {
 					// FIXME: need to push the current rcnt on the stack.
 					//softCallYield(SCRI_biosInterrupt_Rcnt, RcEV[i][1].fhandler);
 				}
-				PSXBIOS_LOG("Clear ISTAT for RCNT %d\n", i);
+				//PSXBIOS_LOG("Clear ISTAT for RCNT %d\n", i);
 				Write_ISTAT(~(1 << (i + 4)));
 			}
 		}
