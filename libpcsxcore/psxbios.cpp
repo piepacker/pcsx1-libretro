@@ -700,34 +700,6 @@ static inline void DeliverEvent(u32 ev, u32 spec) {
     } else EventCB[ev][spec].status = EvStALREADY;
 }
 
-static unsigned interrupt_r26=0x8004E8B0;
-
-static bool s_saved = 0;
-
-static inline void SaveRegs() {
-    assert(!s_saved);
-    s_saved = 1;
-    memcpy(regs, GPR_ARRAY, sizeof(GPR_ARRAY));
-#if HLE_MEDNAFEN_IFC
-    regs[33] = lo;
-    regs[34] = hi;
-#endif
-
-    regs[35] = pc0;
-
-    interrupt_r26 = CP0_EPC;
-}
-
-static inline void LoadRegs() {
-    assert(s_saved);
-    s_saved = 0;
-    memcpy(GPR_ARRAY, regs, sizeof(GPR_ARRAY));
-#if HLE_MEDNAFEN_IFC
-    lo = regs[33];
-    hi = regs[34];
-#endif
-}
-
 /*                                           *
 //                                           *
 //                                           *
@@ -2375,22 +2347,58 @@ void psxBios_PAD_init() { // 15
 }
 
 void psxBios_PAD_dr() { // 16
-#ifdef PSXBIOS_LOG
     PSXBIOS_LOG("psxBios_%s\n", biosB0n[0x16]);
-#endif
 
     v0 = -1; pc0 = ra;
 }
 
+void psxBios_ChangeClearPad() { // 5b
+    PSXBIOS_LOG("psxBios_%s: %x\n", biosB0n[0x5b], a0);
+
+    pc0 = ra;
+}
+
+#if HLE_ENABLE_ENTRYINT
+static unsigned interrupt_r26 = 0x8004E8B0;
+static bool s_saved = 0;
+
+static inline void SaveRegs() {
+    assert(!s_saved);
+    s_saved = 1;
+    memcpy(regs, GPR_ARRAY, sizeof(GPR_ARRAY));
+#if HLE_MEDNAFEN_IFC
+    regs[33] = lo;
+    regs[34] = hi;
+#endif
+
+    regs[35] = pc0;
+
+    interrupt_r26 = CP0_EPC;
+}
+
+static inline void LoadRegs() {
+    assert(s_saved);
+    s_saved = 0;
+    memcpy(GPR_ARRAY, regs, sizeof(GPR_ARRAY));
+#if HLE_MEDNAFEN_IFC
+    lo = regs[33];
+    hi = regs[34];
+#endif
+}
 void psxBios_ReturnFromException() { // 17
+    PSXBIOS_LOG_SPAM("ReturnFromException", "DSlot=%d EPC=%08x\n", ((CP0_CAUSE >> 31) & 1), CP0_EPC);
+
     LoadRegs();
 
-    pc0 = psxRegs.CP0.n.EPC;
+    pc0 = CP0_EPC;
     k0 = interrupt_r26;
-    if (psxRegs.CP0.n.Cause & 0x80000000) pc0 += 4;
 
-    psxRegs.CP0.n.Status = (psxRegs.CP0.n.Status & 0xfffffff0) |
-                          ((psxRegs.CP0.n.Status & 0x3c) >> 2);
+    CP0_STATUS = (CP0_STATUS & 0xfffffff0) |
+                ((CP0_STATUS & 0x3c) >> 2);
+
+#if HLE_MEDNAFEN_IFC
+    PSX_CPU->RecalcIPCache();
+#endif
 }
 
 void psxBios_ResetEntryInt() { // 18
@@ -2406,6 +2414,7 @@ void psxBios_HookEntryInt() { // 19
     jmp_int = a0;
     pc0 = ra;
 }
+#endif
 
 void psxBios_UnDeliverEvent() { // 0x20
     int ev, spec;
@@ -2996,14 +3005,6 @@ void psxBios__card_chan() { // 0x58
 #endif
 
     v0 = card_active_chan;
-    pc0 = ra;
-}
-
-void psxBios_ChangeClearPad() { // 5b
-#ifdef PSXBIOS_LOG
-    PSXBIOS_LOG("psxBios_%s: %x\n", biosB0n[0x5b], a0);
-#endif
-
     pc0 = ra;
 }
 
