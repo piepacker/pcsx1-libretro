@@ -647,7 +647,7 @@ int LoadState(const char *file) {
 	Config.HLE = hle;
 
 	if (Config.HLE)
-		psxBiosInit();
+		psxBiosInitFull();
 
 	psxCpu->Reset();
 	SaveFuncs.seek(f, 128 * 96 * 3, SEEK_CUR);

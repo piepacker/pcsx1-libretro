@@ -65,7 +65,7 @@ void psxReset() {
 	psxCpu->Reset();
 
 	psxHwReset();
-	psxBiosInit();
+	psxBiosInitFull();
 
 	if (!Config.HLE)
 		psxExecuteBios();

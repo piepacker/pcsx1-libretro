@@ -100,6 +100,7 @@ static bool is_suppressed(const char* check) {
 #define HLE_ENABLE_QSORT        0
 
 static bool hle_config_get_bool(std::string opt) {
+	return 1;
 	auto woo = "PSX_HLE_CONFIG_" + opt;
 	if (const char* const env = getenv(woo.c_str())) {
 		auto walk = env;
@@ -2985,41 +2986,34 @@ void (*biosC0[256])();
 
 #include "sjisfont.h"
 
-void psxBiosInit() {
-	u32 base, size;
-	u32 *ptr;
-	int i;
-	uLongf len;
+void psxBiosResetToNone() {
 
-	for(i = 0; i < 256; i++) {
+    for(int i = 0; i < 256; i++) {
 		biosA0[i] = NULL;
 		biosB0[i] = NULL;
 		biosC0[i] = NULL;
 	}
+}
+void psxBiosInit_StdLib() {
+    //HleInitCallTable();
 	biosA0[0x3e] = psxBios_puts;
 	biosA0[0x3f] = psxBios_printf;
 
 	biosB0[0x3d] = psxBios_putchar;
 	biosB0[0x3f] = psxBios_puts;
 
-	if (!Config.HLE) return;
+#if HLE_ENABLE_FILEIO
 
-	for(i = 0; i < 256; i++) {
-		if (biosA0[i] == NULL) biosA0[i] = psxBios_dummy;
-		if (biosB0[i] == NULL) biosB0[i] = psxBios_dummy;
-		if (biosC0[i] == NULL) biosC0[i] = psxBios_dummy;
-	}
 
 	biosA0[0x00] = psxBios_open;
 	biosA0[0x01] = psxBios_lseek;
 	biosA0[0x02] = psxBios_read;
 	biosA0[0x03] = psxBios_write;
 	biosA0[0x04] = psxBios_close;
+#endif
 	//biosA0[0x05] = psxBios_ioctl;
 	//biosA0[0x06] = psxBios_exit;
 	//biosA0[0x07] = psxBios_sys_a0_07;
-	biosA0[0x08] = psxBios_getc;
-	biosA0[0x09] = psxBios_putc;
 	biosA0[0x0a] = psxBios_todigit;
 	//biosA0[0x0b] = psxBios_atof;
 	//biosA0[0x0c] = psxBios_strtoul;
@@ -3059,8 +3053,12 @@ void psxBiosInit() {
 	biosA0[0x2e] = psxBios_memchr;
 	biosA0[0x2f] = psxBios_rand;
 	biosA0[0x30] = psxBios_srand;
-	biosA0[0x31] = psxBios_qsort;
+#if HLE_ENABLE_QSORT
+    biosA0[0x31] = psxBios_qsort;
+#endif
 	//biosA0[0x32] = psxBios_strtod;
+#if HLE_ENABLE_HEAP
+    if (hle_config_env_heap()) {
 	biosA0[0x33] = psxBios_malloc;
 	biosA0[0x34] = psxBios_free;
 	//biosA0[0x35] = psxBios_lsearch;
@@ -3068,252 +3066,326 @@ void psxBiosInit() {
 	biosA0[0x37] = psxBios_calloc;
 	biosA0[0x38] = psxBios_realloc;
 	biosA0[0x39] = psxBios_InitHeap;
+    }
+#endif
 	//biosA0[0x3a] = psxBios__exit;
 	biosA0[0x3b] = psxBios_getchar;
 	biosA0[0x3c] = psxBios_putchar;
 	//biosA0[0x3d] = psxBios_gets;
-	//biosA0[0x40] = psxBios_sys_a0_40;
-	//biosA0[0x41] = psxBios_LoadTest;
-	biosA0[0x42] = psxBios_Load;
-	biosA0[0x43] = psxBios_Exec;
-	biosA0[0x44] = psxBios_FlushCache;
-	//biosA0[0x45] = psxBios_InstallInterruptHandler;
-	biosA0[0x46] = psxBios_GPU_dw;
-	biosA0[0x47] = psxBios_mem2vram;
-	biosA0[0x48] = psxBios_SendGPU;
-	biosA0[0x49] = psxBios_GPU_cw;
-	biosA0[0x4a] = psxBios_GPU_cwb;
-	biosA0[0x4b] = psxBios_GPU_SendPackets;
-	biosA0[0x4c] = psxBios_sys_a0_4c;
-	biosA0[0x4d] = psxBios_GPU_GetGPUStatus;
-	//biosA0[0x4e] = psxBios_GPU_sync;
-	//biosA0[0x4f] = psxBios_sys_a0_4f;
-	//biosA0[0x50] = psxBios_sys_a0_50;
-	biosA0[0x51] = psxBios_LoadExec;
-	//biosA0[0x52] = psxBios_GetSysSp;
-	//biosA0[0x53] = psxBios_sys_a0_53;
-	//biosA0[0x54] = psxBios__96_init_a54;
-	//biosA0[0x55] = psxBios__bu_init_a55;
-	//biosA0[0x56] = psxBios__96_remove_a56;
-	//biosA0[0x57] = psxBios_sys_a0_57;
-	//biosA0[0x58] = psxBios_sys_a0_58;
-	//biosA0[0x59] = psxBios_sys_a0_59;
-	//biosA0[0x5a] = psxBios_sys_a0_5a;
-	//biosA0[0x5b] = psxBios_dev_tty_init;
-	//biosA0[0x5c] = psxBios_dev_tty_open;
-	//biosA0[0x5d] = psxBios_sys_a0_5d;
-	//biosA0[0x5e] = psxBios_dev_tty_ioctl;
-	//biosA0[0x5f] = psxBios_dev_cd_open;
-	//biosA0[0x60] = psxBios_dev_cd_read;
-	//biosA0[0x61] = psxBios_dev_cd_close;
-	//biosA0[0x62] = psxBios_dev_cd_firstfile;
-	//biosA0[0x63] = psxBios_dev_cd_nextfile;
-	//biosA0[0x64] = psxBios_dev_cd_chdir;
-	//biosA0[0x65] = psxBios_dev_card_open;
-	//biosA0[0x66] = psxBios_dev_card_read;
-	//biosA0[0x67] = psxBios_dev_card_write;
-	//biosA0[0x68] = psxBios_dev_card_close;
-	//biosA0[0x69] = psxBios_dev_card_firstfile;
-	//biosA0[0x6a] = psxBios_dev_card_nextfile;
-	//biosA0[0x6b] = psxBios_dev_card_erase;
-	//biosA0[0x6c] = psxBios_dev_card_undelete;
-	//biosA0[0x6d] = psxBios_dev_card_format;
-	//biosA0[0x6e] = psxBios_dev_card_rename;
-	//biosA0[0x6f] = psxBios_dev_card_6f;
-	biosA0[0x70] = psxBios__bu_init;
-	biosA0[0x71] = psxBios__96_init;
-	biosA0[0x72] = psxBios__96_remove;
-	//biosA0[0x73] = psxBios_sys_a0_73;
-	//biosA0[0x74] = psxBios_sys_a0_74;
-	//biosA0[0x75] = psxBios_sys_a0_75;
-	//biosA0[0x76] = psxBios_sys_a0_76;
-	//biosA0[0x77] = psxBios_sys_a0_77;
-	//biosA0[0x78] = psxBios__96_CdSeekL;
-	//biosA0[0x79] = psxBios_sys_a0_79;
-	//biosA0[0x7a] = psxBios_sys_a0_7a;
-	//biosA0[0x7b] = psxBios_sys_a0_7b;
-	//biosA0[0x7c] = psxBios__96_CdGetStatus;
-	//biosA0[0x7d] = psxBios_sys_a0_7d;
-	//biosA0[0x7e] = psxBios__96_CdRead;
-	//biosA0[0x7f] = psxBios_sys_a0_7f;
-	//biosA0[0x80] = psxBios_sys_a0_80;
-	//biosA0[0x81] = psxBios_sys_a0_81;
-	//biosA0[0x82] = psxBios_sys_a0_82;
-	//biosA0[0x83] = psxBios_sys_a0_83;
-	//biosA0[0x84] = psxBios_sys_a0_84;
-	//biosA0[0x85] = psxBios__96_CdStop;
-	//biosA0[0x86] = psxBios_sys_a0_86;
-	//biosA0[0x87] = psxBios_sys_a0_87;
-	//biosA0[0x88] = psxBios_sys_a0_88;
-	//biosA0[0x89] = psxBios_sys_a0_89;
-	//biosA0[0x8a] = psxBios_sys_a0_8a;
-	//biosA0[0x8b] = psxBios_sys_a0_8b;
-	//biosA0[0x8c] = psxBios_sys_a0_8c;
-	//biosA0[0x8d] = psxBios_sys_a0_8d;
-	//biosA0[0x8e] = psxBios_sys_a0_8e;
-	//biosA0[0x8f] = psxBios_sys_a0_8f;
-	//biosA0[0x90] = psxBios_sys_a0_90;
-	//biosA0[0x91] = psxBios_sys_a0_91;
-	//biosA0[0x92] = psxBios_sys_a0_92;
-	//biosA0[0x93] = psxBios_sys_a0_93;
-	//biosA0[0x94] = psxBios_sys_a0_94;
-	//biosA0[0x95] = psxBios_sys_a0_95;
-	//biosA0[0x96] = psxBios_AddCDROMDevice;
-	//biosA0[0x97] = psxBios_AddMemCardDevide;
-	//biosA0[0x98] = psxBios_DisableKernelIORedirection;
-	//biosA0[0x99] = psxBios_EnableKernelIORedirection;
-	//biosA0[0x9a] = psxBios_sys_a0_9a;
-	//biosA0[0x9b] = psxBios_sys_a0_9b;
-	//biosA0[0x9c] = psxBios_SetConf;
-	//biosA0[0x9d] = psxBios_GetConf;
-	//biosA0[0x9e] = psxBios_sys_a0_9e;
-	biosA0[0x9f] = psxBios_SetMem;
-	//biosA0[0xa0] = psxBios__boot;
-	//biosA0[0xa1] = psxBios_SystemError;
-	//biosA0[0xa2] = psxBios_EnqueueCdIntr;
-	//biosA0[0xa3] = psxBios_DequeueCdIntr;
-	//biosA0[0xa4] = psxBios_sys_a0_a4;
-	//biosA0[0xa5] = psxBios_ReadSector;
-	biosA0[0xa6] = psxBios_get_cd_status;
-	//biosA0[0xa7] = psxBios_bufs_cb_0;
-	//biosA0[0xa8] = psxBios_bufs_cb_1;
-	//biosA0[0xa9] = psxBios_bufs_cb_2;
-	//biosA0[0xaa] = psxBios_bufs_cb_3;
-	biosA0[0xab] = psxBios__card_info;
-	biosA0[0xac] = psxBios__card_load;
-	//biosA0[0axd] = psxBios__card_auto;
-	//biosA0[0xae] = psxBios_bufs_cd_4;
-	//biosA0[0xaf] = psxBios_sys_a0_af;
-	//biosA0[0xb0] = psxBios_sys_a0_b0;
-	//biosA0[0xb1] = psxBios_sys_a0_b1;
-	//biosA0[0xb2] = psxBios_do_a_long_jmp
-	//biosA0[0xb3] = psxBios_sys_a0_b3;
-	//biosA0[0xb4] = psxBios_sub_function;
+    biosB0[0x56] = psxBios_GetC0Table;
+    biosB0[0x57] = psxBios_GetB0Table;
+    biosA0[0x44] = psxBios_FlushCache;
+}
+
+static bool is_hle_full_mode = 0;
+
+void psxBiosInitFull() {
+
+	psxBiosInit_StdLib();
+
+    //biosA0[0x40] = psxBios_sys_a0_40;
+    //biosA0[0x41] = psxBios_LoadTest;
+
+#if HLE_ENABLE_LOADEXEC
+    if (hle_config_env_loadexec()) {
+        biosA0[0x42] = psxBios_Load;
+        biosA0[0x51] = psxBios_LoadExec;
+        biosA0[0x43] = psxBios_Exec;
+    }
+#endif
+
+
+    //biosA0[0x45] = psxBios_InstallInterruptHandler;
+
+#if HLE_ENABLE_GPU
+    biosA0[0x46] = psxBios_GPU_dw;
+    biosA0[0x47] = psxBios_mem2vram;
+    biosA0[0x48] = psxBios_SendGPU;
+    biosA0[0x49] = psxBios_GPU_cw;
+    biosA0[0x4a] = psxBios_GPU_cwb;
+    biosA0[0x4b] = psxBios_GPU_SendPackets;
+    biosA0[0x4c] = psxBios_sys_a0_4c;
+    biosA0[0x4d] = psxBios_GPU_GetGPUStatus;
+#endif
+
+    //biosA0[0x4e] = psxBios_GPU_sync;	
+    //biosA0[0x4f] = psxBios_sys_a0_4f;
+    //biosA0[0x50] = psxBios_sys_a0_50;
+    //biosA0[0x52] = psxBios_GetSysSp;
+    //biosA0[0x53] = psxBios_sys_a0_53;
+    //biosA0[0x54] = psxBios__96_init_a54;
+    //biosA0[0x55] = psxBios__bu_init_a55;
+    //biosA0[0x56] = psxBios__96_remove_a56;
+    //biosA0[0x57] = psxBios_sys_a0_57;
+    //biosA0[0x58] = psxBios_sys_a0_58;
+    //biosA0[0x59] = psxBios_sys_a0_59;
+    //biosA0[0x5a] = psxBios_sys_a0_5a;
+    //biosA0[0x5b] = psxBios_dev_tty_init;
+    //biosA0[0x5c] = psxBios_dev_tty_open;
+    //biosA0[0x5d] = psxBios_sys_a0_5d;
+    //biosA0[0x5e] = psxBios_dev_tty_ioctl;
+    //biosA0[0x5f] = psxBios_dev_cd_open;
+    //biosA0[0x60] = psxBios_dev_cd_read;
+    //biosA0[0x61] = psxBios_dev_cd_close;
+    //biosA0[0x62] = psxBios_dev_cd_firstfile;
+    //biosA0[0x63] = psxBios_dev_cd_nextfile;
+    //biosA0[0x64] = psxBios_dev_cd_chdir;
+    //biosA0[0x65] = psxBios_dev_card_open;
+    //biosA0[0x66] = psxBios_dev_card_read;
+    //biosA0[0x67] = psxBios_dev_card_write;
+    //biosA0[0x68] = psxBios_dev_card_close;
+    //biosA0[0x69] = psxBios_dev_card_firstfile;
+    //biosA0[0x6a] = psxBios_dev_card_nextfile;
+    //biosA0[0x6b] = psxBios_dev_card_erase;
+    //biosA0[0x6c] = psxBios_dev_card_undelete;
+    //biosA0[0x6d] = psxBios_dev_card_format;
+    //biosA0[0x6e] = psxBios_dev_card_rename;
+    //biosA0[0x6f] = psxBios_dev_card_6f;
+
+    //biosA0[0x73] = psxBios_sys_a0_73;
+    //biosA0[0x74] = psxBios_sys_a0_74;
+    //biosA0[0x75] = psxBios_sys_a0_75;
+    //biosA0[0x76] = psxBios_sys_a0_76;
+    //biosA0[0x77] = psxBios_sys_a0_77;
+    //biosA0[0x78] = psxBios__96_CdSeekL;
+    //biosA0[0x79] = psxBios_sys_a0_79;
+    //biosA0[0x7a] = psxBios_sys_a0_7a;
+    //biosA0[0x7b] = psxBios_sys_a0_7b;
+    //biosA0[0x7c] = psxBios__96_CdGetStatus;
+    //biosA0[0x7d] = psxBios_sys_a0_7d;
+    //biosA0[0x7e] = psxBios__96_CdRead;
+    //biosA0[0x7f] = psxBios_sys_a0_7f;
+    //biosA0[0x80] = psxBios_sys_a0_80;
+    //biosA0[0x81] = psxBios_sys_a0_81;
+    //biosA0[0x82] = psxBios_sys_a0_82;		
+    //biosA0[0x83] = psxBios_sys_a0_83;
+    //biosA0[0x84] = psxBios_sys_a0_84;
+    //biosA0[0x85] = psxBios__96_CdStop;	
+    //biosA0[0x86] = psxBios_sys_a0_86;
+    //biosA0[0x87] = psxBios_sys_a0_87;
+    //biosA0[0x88] = psxBios_sys_a0_88;
+    //biosA0[0x89] = psxBios_sys_a0_89;
+    //biosA0[0x8a] = psxBios_sys_a0_8a;
+    //biosA0[0x8b] = psxBios_sys_a0_8b;
+    //biosA0[0x8c] = psxBios_sys_a0_8c;
+    //biosA0[0x8d] = psxBios_sys_a0_8d;
+    //biosA0[0x8e] = psxBios_sys_a0_8e;
+    //biosA0[0x8f] = psxBios_sys_a0_8f;
+    //biosA0[0x90] = psxBios_sys_a0_90;
+    //biosA0[0x91] = psxBios_sys_a0_91;
+    //biosA0[0x92] = psxBios_sys_a0_92;
+    //biosA0[0x93] = psxBios_sys_a0_93;
+    //biosA0[0x94] = psxBios_sys_a0_94;
+    //biosA0[0x95] = psxBios_sys_a0_95;
+    //biosA0[0x96] = psxBios_AddCDROMDevice;
+    //biosA0[0x97] = psxBios_AddMemCardDevide;
+    //biosA0[0x98] = psxBios_DisableKernelIORedirection;
+    //biosA0[0x99] = psxBios_EnableKernelIORedirection;
+    //biosA0[0x9a] = psxBios_sys_a0_9a;
+    //biosA0[0x9b] = psxBios_sys_a0_9b;
+    //biosA0[0x9c] = psxBios_SetConf;
+    //biosA0[0x9d] = psxBios_GetConf;
+    //biosA0[0x9e] = psxBios_sys_a0_9e;
+
+#if 0
+    biosA0[0x9f] = psxBios_SetMem;
+#endif
+
+    //biosA0[0xa0] = psxBios__boot;
+    //biosA0[0xa1] = psxBios_SystemError;
+    //biosA0[0xa2] = psxBios_EnqueueCdIntr;
+    //biosA0[0xa3] = psxBios_DequeueCdIntr;
+    //biosA0[0xa4] = psxBios_sys_a0_a4;
+    //biosA0[0xa5] = psxBios_ReadSector;
+    biosA0[0xa6] = psxBios_get_cd_status;
+    //biosA0[0xa7] = psxBios_bufs_cb_0;
+    //biosA0[0xa8] = psxBios_bufs_cb_1;
+    //biosA0[0xa9] = psxBios_bufs_cb_2;
+    //biosA0[0xaa] = psxBios_bufs_cb_3;
+
+#if HLE_ENABLE_EVENT
+    if (hle_config_env_event()) {
+        biosA0[0x70] = psxBios__bu_init;
+        biosB0[0x07] = psxBios_DeliverEvent;
+        biosB0[0x08] = psxBios_OpenEvent;
+        biosB0[0x09] = psxBios_CloseEvent;
+        biosB0[0x0a] = psxBios_WaitEvent;
+        biosB0[0x0b] = psxBios_TestEvent;
+        biosB0[0x0c] = psxBios_EnableEvent;
+        biosB0[0x0d] = psxBios_DisableEvent;
+        biosB0[0x20] = psxBios_UnDeliverEvent;
+    }
+#endif
+
+    //biosA0[0axd] = psxBios__card_auto;
+    //biosA0[0xae] = psxBios_bufs_cd_4;
+    //biosA0[0xaf] = psxBios_sys_a0_af;
+    //biosA0[0xb0] = psxBios_sys_a0_b0;
+    //biosA0[0xb1] = psxBios_sys_a0_b1;
+    //biosA0[0xb2] = psxBios_do_a_long_jmp
+    //biosA0[0xb3] = psxBios_sys_a0_b3;
+    //biosA0[0xb4] = psxBios_sub_function;
 //*******************B0 CALLS****************************
-	//biosB0[0x00] = psxBios_SysMalloc;
-	//biosB0[0x01] = psxBios_sys_b0_01;
-	biosB0[0x02] = psxBios_SetRCnt;
-	biosB0[0x03] = psxBios_GetRCnt;
-	biosB0[0x04] = psxBios_StartRCnt;
-	biosB0[0x05] = psxBios_StopRCnt;
-	biosB0[0x06] = psxBios_ResetRCnt;
-	biosB0[0x07] = psxBios_DeliverEvent;
-	biosB0[0x08] = psxBios_OpenEvent;
-	biosB0[0x09] = psxBios_CloseEvent;
-	biosB0[0x0a] = psxBios_WaitEvent;
-	biosB0[0x0b] = psxBios_TestEvent;
-	biosB0[0x0c] = psxBios_EnableEvent;
-	biosB0[0x0d] = psxBios_DisableEvent;
-	biosB0[0x0e] = psxBios_OpenTh;
-	biosB0[0x0f] = psxBios_CloseTh;
-	biosB0[0x10] = psxBios_ChangeTh;
-	//biosB0[0x11] = psxBios_psxBios_b0_11;
-	biosB0[0x12] = psxBios_InitPAD;
-	biosB0[0x13] = psxBios_StartPAD;
-	biosB0[0x14] = psxBios_StopPAD;
-	biosB0[0x15] = psxBios_PAD_init;
-	biosB0[0x16] = psxBios_PAD_dr;
-	biosB0[0x17] = psxBios_ReturnFromException;
-	biosB0[0x18] = psxBios_ResetEntryInt;
-	biosB0[0x19] = psxBios_HookEntryInt;
-	//biosB0[0x1a] = psxBios_sys_b0_1a;
-	//biosB0[0x1b] = psxBios_sys_b0_1b;
-	//biosB0[0x1c] = psxBios_sys_b0_1c;
-	//biosB0[0x1d] = psxBios_sys_b0_1d;
-	//biosB0[0x1e] = psxBios_sys_b0_1e;
-	//biosB0[0x1f] = psxBios_sys_b0_1f;
-	biosB0[0x20] = psxBios_UnDeliverEvent;
-	//biosB0[0x21] = psxBios_sys_b0_21;
-	//biosB0[0x22] = psxBios_sys_b0_22;
-	//biosB0[0x23] = psxBios_sys_b0_23;
-	//biosB0[0x24] = psxBios_sys_b0_24;
-	//biosB0[0x25] = psxBios_sys_b0_25;
-	//biosB0[0x26] = psxBios_sys_b0_26;
-	//biosB0[0x27] = psxBios_sys_b0_27;
-	//biosB0[0x28] = psxBios_sys_b0_28;
-	//biosB0[0x29] = psxBios_sys_b0_29;
-	//biosB0[0x2a] = psxBios_sys_b0_2a;
-	//biosB0[0x2b] = psxBios_sys_b0_2b;
-	//biosB0[0x2c] = psxBios_sys_b0_2c;
-	//biosB0[0x2d] = psxBios_sys_b0_2d;
-	//biosB0[0x2e] = psxBios_sys_b0_2e;
-	//biosB0[0x2f] = psxBios_sys_b0_2f;
-	//biosB0[0x30] = psxBios_sys_b0_30;
-	//biosB0[0x31] = psxBios_sys_b0_31;
-	biosB0[0x32] = psxBios_open;
-	biosB0[0x33] = psxBios_lseek;
-	biosB0[0x34] = psxBios_read;
-	biosB0[0x35] = psxBios_write;
-	biosB0[0x36] = psxBios_close;
-	//biosB0[0x37] = psxBios_ioctl;
-	//biosB0[0x38] = psxBios_exit;
-	//biosB0[0x39] = psxBios_sys_b0_39;
-	//biosB0[0x3a] = psxBios_getc;
-	//biosB0[0x3b] = psxBios_putc;
-	biosB0[0x3c] = psxBios_getchar;
-	//biosB0[0x3e] = psxBios_gets;
-	//biosB0[0x40] = psxBios_cd;
-	biosB0[0x41] = psxBios_format;
-	biosB0[0x42] = psxBios_firstfile;
-	biosB0[0x43] = psxBios_nextfile;
-	biosB0[0x44] = psxBios_rename;
-	biosB0[0x45] = psxBios_delete;
-	//biosB0[0x46] = psxBios_undelete;
-	//biosB0[0x47] = psxBios_AddDevice;
-	//biosB0[0x48] = psxBios_RemoteDevice;
-	//biosB0[0x49] = psxBios_PrintInstalledDevices;
-	biosB0[0x4a] = psxBios_InitCARD;
-	biosB0[0x4b] = psxBios_StartCARD;
-	biosB0[0x4c] = psxBios_StopCARD;
-	//biosB0[0x4d] = psxBios_sys_b0_4d;
-	biosB0[0x4e] = psxBios__card_write;
-	biosB0[0x4f] = psxBios__card_read;
-	biosB0[0x50] = psxBios__new_card;
-	biosB0[0x51] = psxBios_Krom2RawAdd;
-	//biosB0[0x52] = psxBios_sys_b0_52;
-	//biosB0[0x53] = psxBios_sys_b0_53;
-	//biosB0[0x54] = psxBios__get_errno;
-	biosB0[0x55] = psxBios__get_error;
-	biosB0[0x56] = psxBios_GetC0Table;
-	biosB0[0x57] = psxBios_GetB0Table;
-	biosB0[0x58] = psxBios__card_chan;
-	//biosB0[0x59] = psxBios_sys_b0_59;
-	//biosB0[0x5a] = psxBios_sys_b0_5a;
-	biosB0[0x5b] = psxBios_ChangeClearPad;
-	biosB0[0x5c] = psxBios__card_status;
-	biosB0[0x5d] = psxBios__card_wait;
+    //biosB0[0x00] = psxBios_SysMalloc;
+    //biosB0[0x01] = psxBios_sys_b0_01;
+
+#if HLE_ENABLE_RCNT
+    if (hle_config_env_rcnt()) {
+        biosB0[0x02] = psxBios_SetRCnt;
+        biosB0[0x03] = psxBios_GetRCnt;
+        biosB0[0x04] = psxBios_StartRCnt;
+        biosB0[0x05] = psxBios_StopRCnt;
+        biosB0[0x06] = psxBios_ResetRCnt;
+        biosC0[0x0a] = psxBios_ChangeClearRCnt;	
+    }
+#endif
+
+#if HLE_ENABLE_THREAD
+    if (hle_config_env_thread()) {
+        biosB0[0x0e] = psxBios_OpenTh;
+        biosB0[0x0f] = psxBios_CloseTh;
+        biosB0[0x10] = psxBios_ChangeTh;
+        //biosB0[0x11] = psxBios_psxBios_b0_11;
+    }
+#endif
+
+#if HLE_ENABLE_PAD
+    biosB0[0x12] = psxBios_InitPAD;
+    biosB0[0x13] = psxBios_StartPAD;
+    biosB0[0x14] = psxBios_StopPAD;
+    biosB0[0x15] = psxBios_PAD_init;
+    biosB0[0x16] = psxBios_PAD_dr;
+    biosB0[0x5b] = psxBios_ChangeClearPad;
+#endif
+
+#if HLE_ENABLE_ENTRYINT
+    biosB0[0x18] = psxBios_ResetEntryInt;
+    biosB0[0x19] = psxBios_HookEntryInt;
+#endif
+
+    //biosB0[0x1a] = psxBios_sys_b0_1a;
+    //biosB0[0x1b] = psxBios_sys_b0_1b;
+    //biosB0[0x1c] = psxBios_sys_b0_1c;
+    //biosB0[0x1d] = psxBios_sys_b0_1d;
+    //biosB0[0x1e] = psxBios_sys_b0_1e;
+    //biosB0[0x1f] = psxBios_sys_b0_1f;
+    //biosB0[0x21] = psxBios_sys_b0_21;
+    //biosB0[0x22] = psxBios_sys_b0_22;
+    //biosB0[0x23] = psxBios_sys_b0_23;
+    //biosB0[0x24] = psxBios_sys_b0_24;
+    //biosB0[0x25] = psxBios_sys_b0_25;
+    //biosB0[0x26] = psxBios_sys_b0_26;
+    //biosB0[0x27] = psxBios_sys_b0_27;
+    //biosB0[0x28] = psxBios_sys_b0_28;
+    //biosB0[0x29] = psxBios_sys_b0_29;
+    //biosB0[0x2a] = psxBios_sys_b0_2a;
+    //biosB0[0x2b] = psxBios_sys_b0_2b;
+    //biosB0[0x2c] = psxBios_sys_b0_2c;
+    //biosB0[0x2d] = psxBios_sys_b0_2d;
+    //biosB0[0x2e] = psxBios_sys_b0_2e;
+    //biosB0[0x2f] = psxBios_sys_b0_2f;
+    //biosB0[0x30] = psxBios_sys_b0_30;
+    //biosB0[0x31] = psxBios_sys_b0_31;
+
+#if HLE_ENABLE_FILEIO
+    biosA0[0x08] = psxBios_getc;
+    biosA0[0x09] = psxBios_putc;
+    biosB0[0x32] = psxBios_open;
+    biosB0[0x33] = psxBios_lseek;
+    biosB0[0x34] = psxBios_read;
+    biosB0[0x35] = psxBios_write;
+    biosB0[0x36] = psxBios_close;
+
+    //biosB0[0x37] = psxBios_ioctl;
+    //biosB0[0x38] = psxBios_exit;
+    //biosB0[0x39] = psxBios_sys_b0_39;
+    //biosB0[0x3a] = psxBios_getc;
+    //biosB0[0x3b] = psxBios_putc;
+    biosB0[0x3c] = psxBios_getchar;
+    //biosB0[0x3e] = psxBios_gets;
+    //biosB0[0x40] = psxBios_cd;
+    //biosB0[0x46] = psxBios_undelete;
+    //biosB0[0x47] = psxBios_AddDevice;
+    //biosB0[0x48] = psxBios_RemoteDevice;
+    //biosB0[0x49] = psxBios_PrintInstalledDevices;
+#endif
+
+#if HLE_ENABLE_FINDFILE
+    biosB0[0x42] = psxBios_firstfile;
+    biosB0[0x43] = psxBios_nextfile;
+    biosB0[0x44] = psxBios_rename;
+    biosB0[0x45] = psxBios_delete;
+#endif
+
+#if HLE_ENABLE_FORMAT
+    biosB0[0x41] = psxBios_format;
+#endif
+
+#if HLE_ENABLE_MCD
+    if (hle_config_env_mcd()) {
+        biosA0[0xab] = psxBios__card_info;
+        biosA0[0xac] = psxBios__card_load;
+
+        biosB0[0x4a] = psxBios_InitCARD;
+        biosB0[0x4b] = psxBios_StartCARD;
+        biosB0[0x4c] = psxBios_StopCARD;
+        //biosB0[0x4d] = psxBios_sys_b0_4d;
+        biosB0[0x4e] = psxBios__card_write;
+        biosB0[0x4f] = psxBios__card_read;
+        biosB0[0x50] = psxBios__new_card;
+        biosB0[0x5c] = psxBios__card_status;
+        biosB0[0x58] = psxBios__card_chan;
+        biosB0[0x55] = psxBios__get_error;
+        biosB0[0x5d] = psxBios__card_wait;
+    }
+#endif
+
+    biosB0[0x51] = psxBios_Krom2RawAdd;
+    //biosB0[0x52] = psxBios_sys_b0_52;
+    //biosB0[0x53] = psxBios_sys_b0_53;
+    //biosB0[0x54] = psxBios__get_errno;
+
+    //biosB0[0x59] = psxBios_sys_b0_59;
+    //biosB0[0x5a] = psxBios_sys_b0_5a;
 //*******************C0 CALLS****************************
-	//biosC0[0x00] = psxBios_InitRCnt;
-	//biosC0[0x01] = psxBios_InitException;
-	biosC0[0x02] = psxBios_SysEnqIntRP;
-	biosC0[0x03] = psxBios_SysDeqIntRP;
-	//biosC0[0x04] = psxBios_get_free_EvCB_slot;
-	//biosC0[0x05] = psxBios_get_free_TCB_slot;
-	//biosC0[0x06] = psxBios_ExceptionHandler;
-	//biosC0[0x07] = psxBios_InstallExeptionHandler;
-	//biosC0[0x08] = psxBios_SysInitMemory;
-	//biosC0[0x09] = psxBios_SysInitKMem;
-	biosC0[0x0a] = psxBios_ChangeClearRCnt;
-	//biosC0[0x0b] = psxBios_SystemError;
-	//biosC0[0x0c] = psxBios_InitDefInt;
-	//biosC0[0x0d] = psxBios_sys_c0_0d;
-	//biosC0[0x0e] = psxBios_sys_c0_0e;
-	//biosC0[0x0f] = psxBios_sys_c0_0f;
-	//biosC0[0x10] = psxBios_sys_c0_10;
-	//biosC0[0x11] = psxBios_sys_c0_11;
-	//biosC0[0x12] = psxBios_InstallDevices;
-	//biosC0[0x13] = psxBios_FlushStfInOutPut;
-	//biosC0[0x14] = psxBios_sys_c0_14;
-	//biosC0[0x15] = psxBios__cdevinput;
-	//biosC0[0x16] = psxBios__cdevscan;
-	//biosC0[0x17] = psxBios__circgetc;
-	//biosC0[0x18] = psxBios__circputc;
-	//biosC0[0x19] = psxBios_ioabort;
-	//biosC0[0x1a] = psxBios_sys_c0_1a
-	//biosC0[0x1b] = psxBios_KernelRedirect;
-	//biosC0[0x1c] = psxBios_PatchAOTable;
+    //biosC0[0x00] = psxBios_InitRCnt;
+    //biosC0[0x01] = psxBios_InitException;
+
+#if HLE_ENABLE_ENTRYINT
+    biosB0[0x17] = psxBios_ReturnFromException;
+    biosC0[0x02] = psxBios_SysEnqIntRP;
+    biosC0[0x03] = psxBios_SysDeqIntRP;
+#endif
+
+    //biosC0[0x04] = psxBios_get_free_EvCB_slot;
+    //biosC0[0x05] = psxBios_get_free_TCB_slot;
+    //biosC0[0x06] = psxBios_ExceptionHandler;
+    //biosC0[0x07] = psxBios_InstallExeptionHandler;
+    //biosC0[0x08] = psxBios_SysInitMemory;
+    //biosC0[0x09] = psxBios_SysInitKMem;
+    //biosC0[0x0b] = psxBios_SystemError;
+    //biosC0[0x0c] = psxBios_InitDefInt;
+    //biosC0[0x0d] = psxBios_sys_c0_0d;
+    //biosC0[0x0e] = psxBios_sys_c0_0e;
+    //biosC0[0x0f] = psxBios_sys_c0_0f;
+    //biosC0[0x10] = psxBios_sys_c0_10;
+    //biosC0[0x11] = psxBios_sys_c0_11;
+    //biosC0[0x12] = psxBios_InstallDevices;
+    //biosC0[0x13] = psxBios_FlushStfInOutPut;
+    //biosC0[0x14] = psxBios_sys_c0_14;
+    //biosC0[0x15] = psxBios__cdevinput;
+    //biosC0[0x16] = psxBios__cdevscan;
+    //biosC0[0x17] = psxBios__circgetc;
+    //biosC0[0x18] = psxBios__circputc;
+    //biosC0[0x19] = psxBios_ioabort;
+    //biosC0[0x1a] = psxBios_sys_c0_1a
+    //biosC0[0x1b] = psxBios_KernelRedirect;
+    //biosC0[0x1c] = psxBios_PatchAOTable;
 //************** THE END ***************************************
 /**/
+    u32 base;
+    int size;
+    uLongf len;
 	base = 0x1000;
 	size = sizeof(EvCB) * 32;
 	EventCB = (EvCB *)&psxR[base]; base += size * 6;
@@ -3324,12 +3396,6 @@ void psxBiosInit() {
 	UeEV = EventCB + 32 * 3;
 	SwEV = EventCB + 32 * 4;
 	ThEV = EventCB + 32 * 5;
-
-	ptr = (u32 *)&psxM[0x0874]; // b0 table
-	ptr[0] = SWAPu32(0x4c54 - 0x884);
-
-	ptr = (u32 *)&psxM[0x0674]; // c0 table
-	ptr[6] = SWAPu32(0xc80);
 
 	memset(SysIntRP, 0, sizeof(SysIntRP));
 	memset(ThreadCB, 0, sizeof(ThreadCB));
@@ -3348,6 +3414,12 @@ void psxBiosInit() {
 	CurThread = 0;
 	memset(FDesc, 0, sizeof(FDesc));
 	card_active_chan = 0;
+
+    auto* ptr = (u32 *)PSXM(0x0874); // b0 table
+    ptr[0] = SWAPu32(0x4c54 - 0x884);
+
+    ptr = (u32 *)PSXM(0x0674); // c0 table
+    ptr[6] = SWAPu32(0xc80);
 
 	psxMu32ref(0x0150) = SWAPu32(0x160);
 	psxMu32ref(0x0154) = SWAPu32(0x320);
