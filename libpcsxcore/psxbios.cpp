@@ -47,7 +47,7 @@ static bool s_suppress_spam = 0;
 static std::map<std::string, int> s_repeat_supress;
 
 static bool is_suppressed(const char* check) {
-    return s_suppress_spam && (++s_repeat_supress[check] > 2);
+	return s_suppress_spam && (++s_repeat_supress[check] > 2);
 };
 
 #if !defined(PSXBIOS_LOG)
@@ -100,21 +100,21 @@ static bool is_suppressed(const char* check) {
 #define HLE_ENABLE_QSORT        0
 
 static bool hle_config_get_bool(std::string opt) {
-    auto woo = "PSX_HLE_CONFIG_" + opt;
-    if (const char* const env = getenv(woo.c_str())) {
-        auto walk = env;
-        while(isspace(int(walk[0]))) ++walk;
-        char bval = walk[0];
-        while(isspace(int(walk[0]))) ++walk;
+	auto woo = "PSX_HLE_CONFIG_" + opt;
+	if (const char* const env = getenv(woo.c_str())) {
+		auto walk = env;
+		while(isspace(int(walk[0]))) ++walk;
+		char bval = walk[0];
+		while(isspace(int(walk[0]))) ++walk;
 
-        if (!env[0] || env[1] || !isdigit(int(bval))) {
-            fprintf(stderr, "env parse error at %s=%s\nValid boolean expressions are 0 or 1\n", woo.c_str(), env);
-        }
+		if (!env[0] || env[1] || !isdigit(int(bval))) {
+			fprintf(stderr, "env parse error at %s=%s\nValid boolean expressions are 0 or 1\n", woo.c_str(), env);
+		}
 
-        if (bval == '0') return 0;
-        return 1;       // any non-zero value is boolean true
-    }
-    return 0;
+		if (bval == '0') return 0;
+		return 1;       // any non-zero value is boolean true
+	}
+	return 0;
 }
 
 static bool hle_config_env_rcnt		() { return hle_config_get_bool("RCNT"      ); }
@@ -344,8 +344,8 @@ static const uint32_t PS1_BiosRomEnd		= 0x1fc00000 + PS1_BIOSSIZE;
 #if HLE_PCSX_IFC
 static void Write_ISTAT(u32 val) { psxHwWrite32(0x1f801070, val); }
 static void Write_IMASK(u32 val) { psxHwWrite32(0x1f801074, val); }
-static u32 Read_ISTAT() { return psxHu32(0x1f801070); }
-static u32 Read_IMASK() { return psxHu32(0x1f801074); }
+static u32 Read_ISTAT() { return psxHu32(0x1070); }
+static u32 Read_IMASK() { return psxHu32(0x1074); }
 #endif
 
 #if HLE_MEDNAFEN_IFC
@@ -367,15 +367,15 @@ static u32 Read_IMASK() { return IRQ_Read(0x1074); }
 
 #if HLE_PCSX_IFC
 void VmcWriteNV(int port, int slot, const void* src, int size) {
-    assert((u32)port < 2);
-    auto* dest = port ? Mcd2Data : Mcd1Data;
-    memcpy(dest + a1 * 128, (uint8_t*)src, 128);
-    SaveMcd(port ? Config.Mcd2 : Config.Mcd1, dest, a1 * 128, 128);
+	assert((u32)port < 2);
+	auto* dest = port ? Mcd2Data : Mcd1Data;
+	memcpy(dest + a1 * 128, (uint8_t*)src, 128);
+	SaveMcd(port ? Config.Mcd2 : Config.Mcd1, dest, a1 * 128, 128);
 }
 
 bool VmcEnabled(int port, int slot) {
-    assert((u32)port < 2);
-    return !McdDisable[port];
+	assert((u32)port < 2);
+	return !McdDisable[port];
 }
 #endif
 
@@ -383,58 +383,58 @@ bool VmcEnabled(int port, int slot) {
 #include "mednafen/psx/frontio.h"
 extern FrontIO *PSX_FIO;        // defined by libretro. dunno why this isn't baked into the PSX core for mednafen. --jstine
 void VmcWriteNV(int port, int slot, const void* src, int offset, int size) {
-    assert((u32)port < 2);
-    if (auto mcd = PSX_FIO->GetMemcardDevice(port))
-        mcd->WriteNV((const uint8_t*)src, offset, size);
+	assert((u32)port < 2);
+	if (auto mcd = PSX_FIO->GetMemcardDevice(port))
+		mcd->WriteNV((const uint8_t*)src, offset, size);
 }
 
 void VmcReadNV(int port, int slot, void* dest, int offset, int size) {
-    assert((u32)port < 2);
-    if (auto mcd = PSX_FIO->GetMemcardDevice(port))
-        mcd->ReadNV((uint8_t*)dest, offset, size);
+	assert((u32)port < 2);
+	if (auto mcd = PSX_FIO->GetMemcardDevice(port))
+		mcd->ReadNV((uint8_t*)dest, offset, size);
 }
 
 bool VmcEnabled(int port, int slot) {
-    assert((u32)port < 2);
-    if (auto mcd = PSX_FIO->GetMemcardDevice(port)) {
-        return 1;
-    }
+	assert((u32)port < 2);
+	if (auto mcd = PSX_FIO->GetMemcardDevice(port)) {
+		return 1;
+	}
 
-    return 0;
+	return 0;
 }
 #endif
 
 #if HLE_MEDNAFEN_IFC
 static u8* PSXM(u32 unmasked) {
-    auto masked = unmasked & 0x1fff'ffff;
+	auto masked = unmasked & 0x1fff'ffff;
 
-    u8* mem_ = MainRAM->data8;
+	u8* mem_ = MainRAM->data8;
 
-    if (masked < PS1_RamMirrorSize) {
-        return MainRAM->data8 + (masked & (PS1_RamPhysicalSize - 1));
-    }
-    else if (masked >= 0x1f800000 && masked < (0x1f800000 + PS1_FASTRAMSIZE)) {
-        return ScratchRAM->data8 + (masked-0x1f800000);
-    }
-    else if (masked >= 0x1fc00000 && masked < (0x1fc00000 + PS1_BIOSSIZE)) {
-        return BIOSROM->data8 + (masked-0x1fc00000);
-    }
-    else {
-        assert(false);
-    }
-    //else if (auto* entry = ioHandlers_[HASH_IOADDR(addr)]) {
-    //	return entry->ioRead32(addr);
-    //}
+	if (masked < PS1_RamMirrorSize) {
+		return MainRAM->data8 + (masked & (PS1_RamPhysicalSize - 1));
+	}
+	else if (masked >= 0x1f800000 && masked < (0x1f800000 + PS1_FASTRAMSIZE)) {
+		return ScratchRAM->data8 + (masked-0x1f800000);
+	}
+	else if (masked >= 0x1fc00000 && masked < (0x1fc00000 + PS1_BIOSSIZE)) {
+		return BIOSROM->data8 + (masked-0x1fc00000);
+	}
+	else {
+		assert(false);
+	}
+	//else if (auto* entry = ioHandlers_[HASH_IOADDR(addr)]) {
+	//	return entry->ioRead32(addr);
+	//}
 
-    return MainRAM->data8 + masked;
+	return MainRAM->data8 + masked;
 }
 
 static u32& psxMu32ref(u32 addr) {
-    return (u32&)*PSXM(addr);
+	return (u32&)*PSXM(addr);
 }
 
 static u32 psxMu32(u32 addr) {
-    return *(u32*)PSXM(addr);
+	return *(u32*)PSXM(addr);
 }
 #endif
 
@@ -446,10 +446,10 @@ static u32 psxMu32(u32 addr) {
 #define Rsp ((char *)PSXM(sp))
 
 typedef struct {
-    u32 desc;
-    s32 status;
-    s32 mode;
-    u32 fhandler;
+	u32 desc;
+	s32 status;
+	s32 mode;
+	u32 fhandler;
 } EvCB[32];
 
 #define EvStUNUSED	0x0000
@@ -462,35 +462,35 @@ typedef struct {
 
 /*
 typedef struct {
-    s32 next;
-    s32 func1;
-    s32 func2;
-    s32 pad;
+	s32 next;
+	s32 func1;
+	s32 func2;
+	s32 pad;
 } SysRPst;
 */
 
 typedef struct {
-    s32 status;
-    s32 mode;
-    u32 reg[32];
-    u32 func;
+	s32 status;
+	s32 mode;
+	u32 reg[32];
+	u32 func;
 } TCB;
 
 struct DIRENTRY {
-    char name[20];
-    s32 attr;
-    s32 size;
-    u32 next;
-    s32 head;
-    char system[4];
+	char name[20];
+	s32 attr;
+	s32 size;
+	u32 next;
+	s32 head;
+	char system[4];
 };
 
 typedef struct {
-    char name[32];
-    u32  mode;
-    u32  offset;
-    u32  size;
-    u32  mcfile;
+	char name[32];
+	u32  mode;
+	u32  offset;
+	u32  size;
+	u32  mcfile;
 } FileDesc;
 
 #if HLE_ENABLE_ENTRYINT
@@ -607,26 +607,26 @@ static unsigned interrupt_r26=0x8004E8B0;
 static bool s_saved = 0;
 
 static inline void SaveRegs() {
-    assert(!s_saved);
-    s_saved = 1;
-    memcpy(regs, GPR_ARRAY, sizeof(GPR_ARRAY));
+	assert(!s_saved);
+	s_saved = 1;
+	memcpy(regs, GPR_ARRAY, sizeof(GPR_ARRAY));
 #if HLE_MEDNAFEN_IFC
-    regs[33] = lo;
-    regs[34] = hi;
+	regs[33] = lo;
+	regs[34] = hi;
 #endif
 
-    regs[35] = pc0;
+	regs[35] = pc0;
 
-    interrupt_r26 = CP0_EPC;
+	interrupt_r26 = CP0_EPC;
 }
 
 static inline void LoadRegs() {
-    assert(s_saved);
-    s_saved = 0;
-    memcpy(GPR_ARRAY, regs, sizeof(GPR_ARRAY));
+	assert(s_saved);
+	s_saved = 0;
+	memcpy(GPR_ARRAY, regs, sizeof(GPR_ARRAY));
 #if HLE_MEDNAFEN_IFC
-    lo = regs[33];
-    hi = regs[34];
+	lo = regs[33];
+	hi = regs[34];
 #endif
 }
 
@@ -3420,103 +3420,89 @@ void psxBiosShutdown() {
 		bufcount = (pad_buf##pad[1] & 0x0f) * 2; \
 	} \
 	PAD##pad##_poll(0); \
-	i = 2; \
+	int i = 2; \
 	while (bufcount--) { \
 		pad_buf##pad[i++] = PAD##pad##_poll(0); \
 	} \
 }
 
 void biosInterrupt() {
-	int i, bufcount;
+	int bufcount;
 
-//	if (psxHu32(0x1070) & 0x1) { // Vsync
+	// Looks like this is polling the pads on every interrupt, which is definitely
+	// not what we want. Will have to dig into it later and see if I can figure out why
+	// someone removed the Vsync condition gate below (likely some hack) --jstine
+//	if (Read_ISTAT() & 0x1) { // Vsync
 		if (pad_buf != NULL) {
 			u32 *buf = (u32*)pad_buf;
 
-			if (!Config.UseNet) {
-				PAD1_startPoll(1);
-				if (PAD1_poll(0x42) == 0x23) {
-					PAD1_poll(0);
-					*buf = PAD1_poll(0) << 8;
-					*buf |= PAD1_poll(0);
-					PAD1_poll(0);
-					*buf &= ~((PAD1_poll(0) > 0x20) ? 1 << 6 : 0);
-					*buf &= ~((PAD1_poll(0) > 0x20) ? 1 << 7 : 0);
-				} else {
-					PAD1_poll(0);
-					*buf = PAD1_poll(0) << 8;
-					*buf|= PAD1_poll(0);
-				}
-
-				PAD2_startPoll(2);
-				if (PAD2_poll(0x42) == 0x23) {
-					PAD2_poll(0);
-					*buf |= PAD2_poll(0) << 24;
-					*buf |= PAD2_poll(0) << 16;
-					PAD2_poll(0);
-					*buf &= ~((PAD2_poll(0) > 0x20) ? 1 << 22 : 0);
-					*buf &= ~((PAD2_poll(0) > 0x20) ? 1 << 23 : 0);
-				} else {
-					PAD2_poll(0);
-					*buf |= PAD2_poll(0) << 24;
-					*buf |= PAD2_poll(0) << 16;
-				}
-			} else {
-				u16 data;
-
-				PAD1_startPoll(1);
-				PAD1_poll(0x42);
+		#if HLE_PCSX_IFC && HLE_ENABLE_PAD
+			PAD1_startPoll(1);
+			if (PAD1_poll(0x42) == 0x23) {
 				PAD1_poll(0);
-				data = PAD1_poll(0) << 8;
-				data |= PAD1_poll(0);
-
-				if (NET_sendPadData(&data, 2) == -1)
-					netError();
-
-				if (NET_recvPadData(&((u16*)buf)[0], 1) == -1)
-					netError();
-				if (NET_recvPadData(&((u16*)buf)[1], 2) == -1)
-					netError();
+				*buf = PAD1_poll(0) << 8;
+				*buf |= PAD1_poll(0);
+				PAD1_poll(0);
+				*buf &= ~((PAD1_poll(0) > 0x20) ? 1 << 6 : 0);
+				*buf &= ~((PAD1_poll(0) > 0x20) ? 1 << 7 : 0);
+			} else {
+				PAD1_poll(0);
+				*buf = PAD1_poll(0) << 8;
+				*buf|= PAD1_poll(0);
 			}
-		}
-		if (Config.UseNet && pad_buf1 != NULL && pad_buf2 != NULL) {
-			psxBios_PADpoll(1);
 
-			if (NET_sendPadData(pad_buf1, i) == -1)
-				netError();
-
-			if (NET_recvPadData(pad_buf1, 1) == -1)
-				netError();
-			if (NET_recvPadData(pad_buf2, 2) == -1)
-				netError();
-		} else {
-			if (!pad_stopped)  {
-				if (pad_buf1) {
-					psxBios_PADpoll(1);
-				}
-
-				if (pad_buf2) {
-					psxBios_PADpoll(2);
-				}
+			PAD2_startPoll(2);
+			if (PAD2_poll(0x42) == 0x23) {
+				PAD2_poll(0);
+				*buf |= PAD2_poll(0) << 24;
+				*buf |= PAD2_poll(0) << 16;
+				PAD2_poll(0);
+				*buf &= ~((PAD2_poll(0) > 0x20) ? 1 << 22 : 0);
+				*buf &= ~((PAD2_poll(0) > 0x20) ? 1 << 23 : 0);
+			} else {
+				PAD2_poll(0);
+				*buf |= PAD2_poll(0) << 24;
+				*buf |= PAD2_poll(0) << 16;
 			}
+		#endif
 		}
 
-	if (psxHu32(0x1070) & 0x1) { // Vsync
+		if (!pad_stopped)  {
+	#if HLE_PCSX_IFC && HLE_ENABLE_PAD
+			if (pad_buf1) {
+				psxBios_PADpoll(1);
+			}
+
+			if (pad_buf2) {
+				psxBios_PADpoll(2);
+			}
+	#endif
+		}
+//	}
+
+	auto istat = Read_ISTAT();
+
+	if (istat & 0x1) { // Vsync
 		if (RcEV[3][1].status == EvStACTIVE) {
 			softCall(RcEV[3][1].fhandler);
+			//assert(false);
+			//softCallYield(SCRI_biosInterrupt_Vsync, RcEV[3][1].fhandler);
 //			hwWrite32(0x1f801070, ~(1));
 		}
 	}
 
-	if (psxHu32(0x1070) & 0x70) { // Rcnt 0,1,2
-		int i;
+	if (istat & 0x70) { // Rcnt 0,1,2
 
-		for (i = 0; i < 3; i++) {
-			if (psxHu32(0x1070) & (1 << (i + 4))) {
+		for (int i = 0; i < 3; i++) {
+			if (Read_ISTAT() & (1 << (i + 4))) {
 				if (RcEV[i][1].status == EvStACTIVE) {
 					softCall(RcEV[i][1].fhandler);
+					//assert(false);
+					// FIXME: need to push the current rcnt on the stack.
+					//softCallYield(SCRI_biosInterrupt_Rcnt, RcEV[i][1].fhandler);
 				}
-				psxHwWrite32(0x1f801070, ~(1 << (i + 4)));
+				PSXBIOS_LOG("Clear ISTAT for RCNT %d\n", i);
+				Write_ISTAT(~(1 << (i + 4)));
 			}
 		}
 	}
@@ -3529,8 +3515,8 @@ void psxBiosException80() {
   {
    "INT", "MOD", "TLBL", "TLBS", "ADEL", "ADES", "IBE", "DBE", "SYSCALL", "BP", "RI", "COPU", "OV", NULL, NULL, NULL
   };
-    auto excode = (CP0_CAUSE & 0x3c) >> 2;
-    switch (excode) {
+	auto excode = (CP0_CAUSE & 0x3c) >> 2;
+	switch (excode) {
 		case 0x00: // Interrupt
 			interrupt_r26=psxRegs.CP0.n.EPC;
 //			PSXCPU_LOG("interrupt\n");
@@ -3552,64 +3538,64 @@ void psxBiosException80() {
 				}
 			}
 
-            if (jmp_int) {
-                uint32_t* jmpptr = (uint32_t*)PSXM(jmp_int);
+			if (jmp_int) {
+				uint32_t* jmpptr = (uint32_t*)PSXM(jmp_int);
 				int jmp_addr = (s8*)jmpptr - PSX_RAM_START;
-                //PSXBIOS_LOG("jmp_int @ %08x - ra=%08x sp=%08x fp=%08x\n", jmp_addr, jmpptr[0], jmpptr[1], jmpptr[2]);
-                Write_ISTAT(0xffffffff);
+				//PSXBIOS_LOG("jmp_int @ %08x - ra=%08x sp=%08x fp=%08x\n", jmp_addr, jmpptr[0], jmpptr[1], jmpptr[2]);
+				Write_ISTAT(0xffffffff);
 
-                ra = jmpptr[0];
-                sp = jmpptr[1];
-                fp = jmpptr[2];
-                for (int i = 0; i < 8; i++) // s0-s7
-                     GPR_ARRAY[16 + i] = jmpptr[3 + i];
-                gp = jmpptr[11];
+				ra = jmpptr[0];
+				sp = jmpptr[1];
+				fp = jmpptr[2];
+				for (int i = 0; i < 8; i++) // s0-s7
+					 GPR_ARRAY[16 + i] = jmpptr[3 + i];
+				gp = jmpptr[11];
 
-                v0 = 1;
-                pc0 = ra;
-                return; 
+				v0 = 1;
+				pc0 = ra;
+				return; 
 			}
-            Write_ISTAT(0);
+			Write_ISTAT(0);
 			break;
 
-        case 0x08: // Syscall
-            PSXBIOS_LOG("syscall exp %x\n", a0);
+		case 0x08: // Syscall
+			PSXBIOS_LOG("syscall exp %x\n", a0);
 			switch (a0) {
 				case 1: // EnterCritical - disable irq's
 					/* Fixes Medievil 2 not loading up new game, Digimon World not booting up and possibly others */
-                    v0 = (CP0_STATUS & 0x404) == 0x404;
-                    CP0_STATUS &= ~0x404; 
+					v0 = (CP0_STATUS & 0x404) == 0x404;
+					CP0_STATUS &= ~0x404; 
 					break;
 
 				case 2: // ExitCritical - enable irq's
-                    CP0_STATUS |= 0x404; 
+					CP0_STATUS |= 0x404; 
 					break;
 				/* Normally this should cover SYS(00h, SYS(04h but they don't do anything relevant so... */
 				default:
 					break;
 			}
-            pc0 = CP0_EPC + 4;
+			pc0 = CP0_EPC + 4;
 
-            CP0_STATUS = (CP0_STATUS & 0xfffffff0) |
-                        ((CP0_STATUS & 0x3c) >> 2);
+			CP0_STATUS = (CP0_STATUS & 0xfffffff0) |
+						((CP0_STATUS & 0x3c) >> 2);
 			return;
 
-        case 0xa:  // Reserved instruction exception
-            assert(false);
-        break;
-        case 0xb:  // Reserved instruction exception
-            assert(false);
-        break;
+		case 0xa:  // Reserved instruction exception
+			assert(false);
+		break;
+		case 0xb:  // Reserved instruction exception
+			assert(false);
+		break;
 		default:
-            PSXBIOS_LOG("unknown bios exception 0x%x (%s)\n", excode, exmne[excode]);
+			PSXBIOS_LOG("unknown bios exception 0x%x (%s)\n", excode, exmne[excode]);
 			break;
 	}
 
-    pc0 = CP0_EPC;
-    if (CP0_CAUSE & 0x80000000) pc0+=4;
+	pc0 = CP0_EPC;
+	if (CP0_CAUSE & 0x80000000) pc0+=4;
 
-    CP0_STATUS = (CP0_STATUS & 0xfffffff0) |
-                ((CP0_STATUS & 0x3c) >> 2);
+	CP0_STATUS = (CP0_STATUS & 0xfffffff0) |
+				((CP0_STATUS & 0x3c) >> 2);
 }
 
 #define bfreeze(ptr, size) { \
