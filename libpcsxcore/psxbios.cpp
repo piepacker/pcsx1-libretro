@@ -700,93 +700,6 @@ static inline void DeliverEvent(u32 ev, u32 spec) {
     } else EventCB[ev][spec].status = EvStALREADY;
 }
 
-/*                                           *
-//                                           *
-//                                           *
-//               System calls A0             */
-
-
-#define buread(Ra1, mcd, length) { \
-    SysPrintf("read %d: %x,%x (%s)\n", FDesc[1 + mcd].mcfile, FDesc[1 + mcd].offset, a2, Mcd##mcd##Data + 128 * FDesc[1 + mcd].mcfile + 0xa); \
-    ptr = Mcd##mcd##Data + 8192 * FDesc[1 + mcd].mcfile + FDesc[1 + mcd].offset; \
-    memcpy(Ra1, ptr, length); \
-    if (FDesc[1 + mcd].mode & 0x8000) { \
-    DeliverEvent(0x11, 0x2); /* 0xf0000011, 0x0004 */ \
-    DeliverEvent(0x81, 0x2); /* 0xf4000001, 0x0004 */ \
-    v0 = 0; } \
-    else v0 = length; \
-    FDesc[1 + mcd].offset += v0; \
-}
-
-#define buwrite(Ra1, mcd, length) { \
-    u32 offset =  + 8192 * FDesc[1 + mcd].mcfile + FDesc[1 + mcd].offset; \
-    SysPrintf("write %d: %x,%x\n", FDesc[1 + mcd].mcfile, FDesc[1 + mcd].offset, a2); \
-    ptr = Mcd##mcd##Data + offset; \
-    memcpy(ptr, Ra1, length); \
-    FDesc[1 + mcd].offset += length; \
-    SaveMcd(Config.Mcd##mcd, Mcd##mcd##Data, offset, length); \
-    if (FDesc[1 + mcd].mode & 0x8000) { \
-    DeliverEvent(0x11, 0x2); /* 0xf0000011, 0x0004 */ \
-    DeliverEvent(0x81, 0x2); /* 0xf4000001, 0x0004 */ \
-    v0 = 0; } \
-    else v0 = length; \
-}
-
-
-/* Internally redirects to "FileRead(fd,tempbuf,1)".*/
-/* For some strange reason, the returned character is sign-expanded; */
-/* So if a return value of FFFFFFFFh could mean either character FFh, or error. */
-/* TODO FIX ME : Properly implement this behaviour */
-void psxBios_getc(void) // 0x03, 0x35
-{
-    char *ptr;
-    void *pa1 = Ra1;
-
-    PSXBIOS_LOG("psxBios_%s\n", biosA0n[0x03]);
-    v0 = -1;
-
-    if (pa1) {
-        switch (a0) {
-            case 2: buread(pa1, 1, 1); break;
-            case 3: buread(pa1, 2, 1); break;
-        }
-    }
-
-    pc0 = ra;
-}
-
-/* Copy of psxBios_write, except size is 1. */
-void psxBios_putc(void) // 0x09, 0x3B
-{
-    char *ptr;
-    void *pa1 = Ra1;
-
-    PSXBIOS_LOG("psxBios_%s\n", biosA0n[0x09]);
-
-    v0 = -1;
-    if (!pa1) {
-        pc0 = ra;
-        return;
-    }
-
-    if (a0 == 1) { // stdout
-        char *ptr = (char *)pa1;
-
-        v0 = a2;
-        while (a2 > 0) {
-            printf("%c", *ptr++); a2--;
-        }
-        pc0 = ra; return;
-    }
-
-    switch (a0) {
-        case 2: buwrite(pa1, 1, 1); break;
-        case 3: buwrite(pa1, 2, 1); break;
-    }
-
-    pc0 = ra;
-}
-
 void psxBios_todigit(void) // 0x0a
 {
     int c = a0;
@@ -2515,11 +2428,43 @@ void psxBios_UnDeliverEvent() { // 0x20
 }
 #endif
 
+#if HLE_ENABLE_FILEIO
+#if HLE_PCSX_IFC
+#define buread(Ra1, mcd, length) { \
+    SysPrintf("read %d: %x,%x (%s)\n", FDesc[1 + mcd].mcfile, FDesc[1 + mcd].offset, a2, Mcd##mcd##Data + 128 * FDesc[1 + mcd].mcfile + 0xa); \
+    ptr = Mcd##mcd##Data + 8192 * FDesc[1 + mcd].mcfile + FDesc[1 + mcd].offset; \
+    memcpy(Ra1, ptr, length); \
+    if (FDesc[1 + mcd].mode & 0x8000) { \
+    DeliverEvent(0x11, 0x2); /* 0xf0000011, 0x0004 */ \
+    DeliverEvent(0x81, 0x2); /* 0xf4000001, 0x0004 */ \
+    v0 = 0; } \
+    else v0 = length; \
+    FDesc[1 + mcd].offset += v0; \
+}
+#define buwrite(Ra1, mcd, length) { \
+    u32 offset =  + 8192 * FDesc[1 + mcd].mcfile + FDesc[1 + mcd].offset; \
+    SysPrintf("write %d: %x,%x\n", FDesc[1 + mcd].mcfile, FDesc[1 + mcd].offset, a2); \
+    ptr = Mcd##mcd##Data + offset; \
+    memcpy(ptr, Ra1, length); \
+    FDesc[1 + mcd].offset += length; \
+    SaveMcd(Config.Mcd##mcd, Mcd##mcd##Data, offset, length); \
+    if (FDesc[1 + mcd].mode & 0x8000) { \
+    DeliverEvent(0x11, 0x2); /* 0xf0000011, 0x0004 */ \
+    DeliverEvent(0x81, 0x2); /* 0xf4000001, 0x0004 */ \
+    v0 = 0; } \
+    else v0 = length; \
+}
+#else
+#define buread(Ra1, mcd, length)   (assert(false))
+#define buwrite(Ra1, mcd, length)  (assert(false))
+#endif
+
 char ffile[64], *pfile;
 int nfile;
 
 static void buopen(int mcd, char *ptr, char *cfg)
 {
+#if HLE_PCSX_IFC
     int i;
     char *mcd_data = ptr;
 
@@ -2574,11 +2519,69 @@ static void buopen(int mcd, char *ptr, char *cfg)
             SysPrintf("openC %s %d\n", ptr, nblk);
             v0 = 1 + mcd;
             /* just go ahead and resave them all */
+            //VmcWriteNV(
             SaveMcd(cfg, ptr, 128, 128 * 15);
             break;
         }
         /* shouldn't this return ENOSPC if i == 16? */
     }
+#endif
+}
+
+/* Internally redirects to "FileRead(fd,tempbuf,1)".*/
+/* For some strange reason, the returned character is sign-expanded; */
+/* So if a return value of FFFFFFFFh could mean either character FFh, or error. */
+/* TODO FIX ME : Properly implement this behaviour */
+void psxBios_getc(void) // 0x03, 0x35
+{
+    char *ptr;
+    void *pa1 = Ra1;
+
+    PSXBIOS_LOG("psxBios_%s\n", biosA0n[0x03]);
+
+    v0 = -1;
+
+    if (pa1) {
+        switch (a0) {
+            case 2: buread(pa1, 1, 1); break;
+            case 3: buread(pa1, 2, 1); break;
+        }
+    }
+
+    pc0 = ra;
+}
+
+/* Copy of psxBios_write, except size is 1. */
+void psxBios_putc(void) // 0x09, 0x3B
+{
+    char *ptr;
+    void *pa1 = Ra1;
+
+    PSXBIOS_LOG("psxBios_%s\n", biosA0n[0x09]);
+    
+    v0 = -1;
+    if (!pa1) {
+        pc0 = ra;
+        return;
+    }
+
+    if (a0 == 1) { // stdout
+        char *ptr = (char *)pa1;
+
+        v0 = a2;
+        while (a2 > 0) {
+            raw_putc(*ptr++); a2--;
+        }
+        pc0 = ra;
+        return;
+    }
+
+    switch (a0) {
+        case 2: buwrite(pa1, 1, 1); break;
+        case 3: buwrite(pa1, 2, 1); break;
+    }
+
+    pc0 = ra;
 }
 
 /*
@@ -2586,7 +2589,7 @@ static void buopen(int mcd, char *ptr, char *cfg)
  */
 
 void psxBios_open() { // 0x32
-    auto *pa0 = Ra0;
+    auto *pa0 = (char*)Ra0;
 
     PSXBIOS_LOG("psxBios_%s: %s,%x\n", biosB0n[0x32], Ra0, a1);
 
@@ -2628,7 +2631,6 @@ void psxBios_lseek() { // 0x33
 
     pc0 = ra;
 }
-
 
 /*
  *	int read(int fd , void *buf , int nbytes);
@@ -2673,7 +2675,7 @@ void psxBios_write() { // 0x35/0x03
 
         v0 = a2;
         while (a2 > 0) {
-            SysPrintf("%c", *ptr++); a2--;
+            raw_putc(*ptr++); a2--;
         }
         pc0 = ra; return;
     }
@@ -2707,51 +2709,59 @@ static size_t strlen_internal(char* p)
     return size_of_array;
 }
 
-#define bufile(mcd) { \
-    size_t size_of_name = strlen_internal(dir->name); \
-    while (nfile < 16) { \
-        int match=1; \
- \
-        ptr = Mcd##mcd##Data + 128 * (nfile + 1); \
-        nfile++; \
-        if ((*ptr & 0xF0) != 0x50) continue; \
-        /* Bug link files show up as free block. */ \
-        if (!ptr[0xa]) continue; \
-        ptr+= 0xa; \
-        if (pfile[0] == 0) { \
-            strncpy(dir->name, ptr, sizeof(dir->name) - 1); \
-            if (size_of_name < sizeof(dir->name)) dir->name[size_of_name] = '\0'; \
-        } else for (i=0; i<20; i++) { \
-            if (pfile[i] == ptr[i]) { \
-                                dir->name[i] = ptr[i]; continue; } \
-            if (pfile[i] == '?') { \
-                dir->name[i] = ptr[i]; continue; } \
-            if (pfile[i] == '*') { \
-                strcpy(dir->name+i, ptr+i); break; } \
-            match = 0; break; \
-        } \
-        SysPrintf("%d : %s = %s + %s (match=%d)\n", nfile, dir->name, pfile, ptr, match); \
-        if (match == 0) { continue; } \
-        dir->size = 8192; \
-        v0 = _dir; \
-        break; \
-    } \
+static void bufile(const u8* mcdraw) {
+    u32 _dir = a1;
+    struct DIRENTRY *dir = (struct DIRENTRY *)Ra1;
+
+    size_t size_of_name = strlen_internal(dir->name);
+
+    while (nfile < 16) {
+        int match=1;
+        auto* ptr = mcdraw + 128 * (nfile + 1);
+
+        nfile++;
+        if ((*ptr & 0xF0) != 0x50) continue;
+        /* Bug link files show up as free block. */
+        if (!ptr[0xa]) continue;
+        ptr+= 0xa;
+        if (pfile[0] == 0) {
+            strncpy(dir->name, (char*)ptr, sizeof(dir->name) - 1);
+            if (size_of_name < sizeof(dir->name)) dir->name[size_of_name] = '\0';
+        } else for (int i=0; i<20; i++) {
+            if (pfile[i] == ptr[i]) {
+                dir->name[i] = ptr[i]; continue;
+            }
+            if (pfile[i] == '?') {
+                dir->name[i] = ptr[i]; continue;
+            }
+            if (pfile[i] == '*') {
+                strcpy(dir->name+i, (char*)ptr+i); break;
+            }
+            match = 0; break;
+        }
+        SysPrintf("%d : %s = %s + %s (match=%d)\n", nfile, dir->name, pfile, ptr, match);
+        if (match == 0) { continue; }
+        dir->size = 8192;
+        v0 = _dir;
+        break;
+    }
 }
 
+#if HLE_ENABLE_FINDFILE
 /*
  *	struct DIRENTRY* firstfile(char *name,struct DIRENTRY *dir);
  */
-
+ 
 void psxBios_firstfile() { // 42
-    struct DIRENTRY *dir = (struct DIRENTRY *)Ra1;
     auto *pa0 = Ra0;
-    u32 _dir = a1;
     char *ptr;
     int i;
 
     PSXBIOS_LOG("psxBios_%s: %s\n", biosB0n[0x42], Ra0);
 
     v0 = 0;
+
+    auto mcd = PSX_FIO->GetMemcardDevice(0);
 
     if (pa0) {
         strcpy(ffile, pa0);
@@ -2760,7 +2770,7 @@ void psxBios_firstfile() { // 42
         if (!strncmp(pa0, "bu00", 4)) {
             // firstfile() calls _card_read() internally, so deliver it's event
             DeliverEvent(0x11, 0x2);
-            bufile(1);
+            bufile(VmcReadNV);
         } else if (!strncmp(pa0, "bu10", 4)) {
             // firstfile() calls _card_read() internally, so deliver it's event
             DeliverEvent(0x11, 0x2);
@@ -2818,8 +2828,8 @@ void psxBios_nextfile() { // 43
  */
 
 void psxBios_rename() { // 44
-    auto *pa0 = Ra0;
-    auto *pa1 = Ra1;
+    void *pa0 = Ra0;
+    void *pa1 = Ra1;
     char *ptr;
     int i;
 
@@ -2859,7 +2869,7 @@ void psxBios_rename() { // 44
  */
 
 void psxBios_delete() { // 45
-    auto *pa0 = Ra0;
+    void *pa0 = Ra0;
     char *ptr;
     int i;
 
@@ -2879,6 +2889,8 @@ void psxBios_delete() { // 45
 
     pc0 = ra;
 }
+#endif // HLE_ENABLE_FINDFILE
+#endif // HLE_ENABLE_FILEIO
 
 void psxBios_InitCARD() { // 4a
     PSXBIOS_LOG("psxBios_%s: %x\n", biosB0n[0x4a], a0);
