@@ -2392,14 +2392,16 @@ void psxBios_InitPAD() { // 0x12
 
 void psxBios_StartPAD() { // 13
     PSXBIOS_LOG("psxBios_%s\n", biosB0n[0x13]);
+
     pad_stopped = 0;
-    psxHwWrite16(0x1f801074, (unsigned short)(psxHwRead16(0x1f801074) | 0x1));
-    psxRegs.CP0.n.Status |= 0x401;
+    Write_IMASK((unsigned short)(Read_IMASK() | 0x1));
+    CP0_STATUS |= 0x401;
     pc0 = ra;
 }
 
 void psxBios_StopPAD() { // 14
     PSXBIOS_LOG("psxBios_%s\n", biosB0n[0x14]);
+
     pad_stopped = 1;
     pad_buf1 = NULL;
     pad_buf2 = NULL;
@@ -2408,16 +2410,18 @@ void psxBios_StopPAD() { // 14
 
 void psxBios_PAD_init() { // 15
     PSXBIOS_LOG("psxBios_%s\n", biosB0n[0x15]);
+
     if (!(a0 == 0x20000000 || a0 == 0x20000001))
     {
         v0 = 0;
         pc0 = ra;
         return;
     }
-    psxHwWrite16(0x1f801074, (u16)(psxHwRead16(0x1f801074) | 0x1));
+
+    Write_IMASK((u16)(Read_IMASK() | 0x1));
     pad_buf = (int *)Ra1;
     *pad_buf = -1;
-    psxRegs.CP0.n.Status |= 0x401;
+    CP0_STATUS |= 0x401;
     v0 = 2;
     pc0 = ra;
 }
@@ -2493,6 +2497,7 @@ void psxBios_HookEntryInt() { // 19
 }
 #endif
 
+#if HLE_ENABLE_EVENT
 void psxBios_UnDeliverEvent() { // 0x20
     int ev, spec;
     int i;
@@ -2508,6 +2513,7 @@ void psxBios_UnDeliverEvent() { // 0x20
 
     pc0 = ra;
 }
+#endif
 
 char ffile[64], *pfile;
 int nfile;
