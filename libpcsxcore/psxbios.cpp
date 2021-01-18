@@ -859,7 +859,7 @@ void psxBios_setjmp() { // 0x13
     jmp_buf[1] = sp;
     jmp_buf[2] = fp;
     for (i = 0; i < 8; i++) // s0-s7
-        jmp_buf[3 + i] = psxRegs.GPR.r[16 + i];
+        jmp_buf[3 + i] = GPR_ARRAY[16 + i];
     jmp_buf[11] = gp;
 
     v0 = 0; pc0 = ra;
@@ -875,7 +875,7 @@ void psxBios_longjmp() { // 0x14
     sp = jmp_buf[1]; /* sp */
     fp = jmp_buf[2]; /* fp */
     for (i = 0; i < 8; i++) // s0-s7
-        psxRegs.GPR.r[16 + i] = jmp_buf[3 + i];
+        GPR_ARRAY[16 + i] = jmp_buf[3 + i];
     gp = jmp_buf[11]; /* gp */
 
     v0 = a1; pc0 = ra;
@@ -886,8 +886,7 @@ void psxBios_strcat() { // 0x15
 
     PSXBIOS_LOG("psxBios_%s: %s, %s\n", biosA0n[0x15], Ra0, Ra1);
 
-    if (a0 == 0 || a1 == 0)
-    {
+    if (!a0 || !a1) {
         v0 = 0;
         pc0 = ra;
         return;
