@@ -1211,6 +1211,7 @@ void psxBios_bzero() { // 0x28
     }
     while ((s32)a1-- > 0) *p++ = '\0';
     a1 = 0;
+
     pc0 = ra;
 }
 
@@ -1246,7 +1247,6 @@ void psxBios_memcpy() { // 0x2a
 }
 
 void psxBios_memset() { // 0x2b
-    char *p = (char *)Ra0;
     v0 = a0;
     if (a2 > 0x7FFFFFFF || a2 == 0)
     {
@@ -1259,19 +1259,24 @@ void psxBios_memset() { // 0x2b
         pc0 = ra;
         return;
     }
+
+    char *p = (char *)Ra0;
     while ((s32)a2-- > 0) *p++ = (char)a1;
+
     a2 = 0;
     v0 = a0; pc0 = ra;
 }
 
 void psxBios_memmove() { // 0x2c
     char *p1 = (char *)Ra0, *p2 = (char *)Ra1;
+
     v0 = a0;
     if (a0 == 0 || a2 > 0x7FFFFFFF)
     {
         pc0 = ra;
         return;
     }
+
     if (p2 <= p1 && p2 + a2 > p1) {
         a2++; // BUG: copy one more byte here
         p1 += a2;
@@ -1280,6 +1285,7 @@ void psxBios_memmove() { // 0x2c
     } else {
         while ((s32)a2-- > 0) *p1++ = *p2++;
     }
+
     pc0 = ra;
 }
 
@@ -1424,11 +1430,11 @@ void psxBios_qsort() { // 0x31
     pc0 = ra;
 }
 
+#if HLE_ENABLE_HEAP
 void psxBios_malloc() { // 0x33
     unsigned int *chunk, *newchunk = NULL;
     unsigned int dsize = 0, csize, cstat;
     int colflag;
-
     PSXBIOS_LOG("psxBios_%s\n", biosA0n[0x33]);
 
     if (!a0 || (!heap_size || !heap_addr)) {
@@ -1449,7 +1455,7 @@ void psxBios_malloc() { // 0x33
         // this fixes Burning Road
         if (*chunk == 0) {
             newchunk = chunk;
-            dsize = ((uptr)heap_end - (uptr)chunk) - 4;
+            dsize = ((sptr)heap_end - (sptr)chunk) - 4;
             colflag = 1;
             break;
         }
@@ -1493,7 +1499,7 @@ void psxBios_malloc() { // 0x33
 
     // search an unused chunk that is big enough until the end of the heap
     while ((dsize > csize || cstat==0) && chunk < heap_end ) {
-        chunk = (u32*)((uptr)chunk + csize + 4);
+        chunk = (u32*)((sptr)chunk + csize + 4);
 
             // catch out of memory
             if(chunk >= heap_end) {
@@ -1517,12 +1523,12 @@ void psxBios_malloc() { // 0x33
     } else {
         // split free chunk
         *chunk = SWAP32(dsize);
-        newchunk = (u32*)((uptr)chunk + dsize + 4);
+        newchunk = (u32*)((sptr)chunk + dsize + 4);
         *newchunk = SWAP32(((csize - dsize - 4) & 0xfffffffc) | 1);
     }
 
     // return pointer to allocated memory
-    v0 = ((uptr)chunk - (uptr)psxM) + 4;
+    v0 = ((sptr)chunk - (sptr)PSX_RAM_START) + 4;
     v0|= 0x80000000;
     //printf ("malloc %x,%x\n", v0, a0);
     pc0 = ra;
@@ -1534,8 +1540,9 @@ void psxBios_free() { // 0x34
 
     SysPrintf("free %x: %x bytes\n", a0, *(u32*)(Ra0-4));
 
-    if (a0)
+    if (a0) {
         *(u32*)(Ra0-4) |= 1;	// set chunk to free
+    }
     pc0 = ra;
 }
 
@@ -1594,10 +1601,11 @@ void psxBios_InitHeap() { // 0x39
     /* HACKFIX: Commenting out this line fixes GTA2 crash */
     //*heap_addr = SWAP32(size | 1);
 
-    SysPrintf("InitHeap %x,%x : %x %x\n",a0,a1, (int)((uptr)heap_addr-(uptr)psxM), size);
+    SysPrintf("InitHeap %x,%x : %x %x\n",a0,a1, (int)((uptr)heap_addr-(uptr)PSX_RAM_START), size);
 
     pc0 = ra;
 }
+#endif
 
 void psxBios_getchar() { //0x3b
     v0 = getchar(); pc0 = ra;
