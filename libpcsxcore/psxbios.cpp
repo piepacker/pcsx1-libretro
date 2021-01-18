@@ -891,6 +891,7 @@ void psxBios_strcat() { // 0x15
         pc0 = ra;
         return;
     }
+
     while (*p1++);
     --p1;
     while ((*p1++ = *p2++) != '\0');
@@ -904,12 +905,12 @@ void psxBios_strncat() { // 0x16
 
     PSXBIOS_LOG("psxBios_%s: %s (%x), %s (%x), %d\n", biosA0n[0x16], Ra0, a0, Ra1, a1, a2);
 
-    if (a0 == 0 || a1 == 0)
-    {
+    if (!a0 || !a1) {
         v0 = 0;
         pc0 = ra;
         return;
     }
+
     while (*p1++);
     --p1;
     while ((*p1++ = *p2++) != '\0') {
@@ -924,7 +925,9 @@ void psxBios_strncat() { // 0x16
 
 void psxBios_strcmp() { // 0x17
     char *p1 = (char *)Ra0, *p2 = (char *)Ra1;
-    s32 n=0;
+
+    PSXBIOS_LOG("psxBios_%s: %s (%x), %s (%x)\n", biosA0n[0x17], Ra0, a0, Ra1, a1);
+
     if (a0 == 0 && a1 == 0)
     {
         v0 = 0;
@@ -944,8 +947,7 @@ void psxBios_strcmp() { // 0x17
         return;
     }
 
-    PSXBIOS_LOG("psxBios_%s: %s (%x), %s (%x)\n", biosA0n[0x17], Ra0, a0, Ra1, a1);
-
+    s32 n=0;
     while (*p1 == *p2++) {
         n++;
         if (*p1++ == '\0') {
@@ -966,8 +968,9 @@ void psxBios_strcmp() { // 0x17
 }
 
 void psxBios_strncmp() { // 0x18
-    char *p1 = (char *)Ra0, *p2 = (char *)Ra1;
-    s32 n = a2;
+
+    PSXBIOS_LOG("psxBios_%s: %s (%x), %s (%x), %d\n", biosA0n[0x18], Ra0, a0, Ra1, a1, a2);
+
     if (a0 == 0 && a1 == 0)
     {
         v0 = 0;
@@ -987,8 +990,8 @@ void psxBios_strncmp() { // 0x18
         return;
     }
 
-    PSXBIOS_LOG("psxBios_%s: %s (%x), %s (%x), %d\n", biosA0n[0x18], Ra0, a0, Ra1, a1, a2);
-
+    char *p1 = (char *)Ra0, *p2 = (char *)Ra1;
+    s32 n = a2;
     while (--n >= 0 && *p1 == *p2++) {
         if (*p1++ == '\0') {
             v0 = 0;
@@ -1002,35 +1005,37 @@ void psxBios_strncmp() { // 0x18
     }
 
     v0 = (n < 0 ? 0 : *p1 - *--p2);
-    pc0 = ra;
     v1 = a2 - ((a2-n) - 1);
     a0 += (a2-n) - 1;
     a1 += (a2-n) - 1;
     a2 = n;
+
+    pc0 = ra;
 }
 
 void psxBios_strcpy() { // 0x19
-    char *p1 = (char *)Ra0, *p2 = (char *)Ra1;
-    if (a0 == 0 || a1 == 0)
-    {
+    if (!a0 || !a1) {
         v0 = 0;
         pc0 = ra;
         return;
     }
+
+    char *p1 = (char *)Ra0, *p2 = (char *)Ra1;
     while ((*p1++ = *p2++) != '\0');
 
     v0 = a0; pc0 = ra;
 }
 
 void psxBios_strncpy() { // 0x1a
-    char *p1 = (char *)Ra0, *p2 = (char *)Ra1;
-    s32 n = a2, i;
-    if (a0 == 0 || a1 == 0)
-    {
+    if (!a0 || !a1) {
         v0 = 0;
         pc0 = ra;
         return;
     }
+
+    char *p1 = (char *)Ra0, *p2 = (char *)Ra1;
+    s32 n = a2, i;
+
     for (i = 0; i < n; i++) {
         if ((*p1++ = *p2++) == '\0') {
             while (++i < n) {
@@ -1045,50 +1050,41 @@ void psxBios_strncpy() { // 0x1a
 }
 
 void psxBios_strlen() { // 0x1b
-    char *p = (char *)Ra0;
-    v0 = 0;
-    if (a0 == 0)
-    {
-        pc0 = ra;
-        return;
+    if (a0) {
+        char *p = (char *)Ra0;
+        v0 = 0;
+        while (*p++) v0++;
     }
-    while (*p++) v0++;
     pc0 = ra;
 }
 
 void psxBios_index() { // 0x1c
-    char *p = (char *)Ra0;
-    if (a0 == 0)
-    {
-        v0 = 0;
-        pc0 = ra;
-        return;
-    }
+    if (a0) {
+        char *p = (char *)Ra0;
 
-    do {
-        if (*p == a1) {
-            v0 = a0 + (p - (char *)Ra0);
-            pc0 = ra;
-            return;
-        }
-    } while (*p++ != '\0');
+        do {
+            if (*p == a1) {
+                v0 = a0 + (p - (char *)Ra0);
+                pc0 = ra;
+                return;
+            }
+        } while (*p++ != '\0');
+    }
 
     v0 = 0; pc0 = ra;
 }
 
 void psxBios_rindex() { // 0x1d
-    char *p = (char *)Ra0;
+    if (a0) {
+        char *p = (char *)Ra0;
 
-    v0 = 0;
-    if (a0 == 0)
-    {
-        pc0 = ra;
-        return;
+        v0 = 0;
+
+        do {
+            if (*p == a1)
+                v0 = a0 + (p - (char *)Ra0);
+        } while (*p++ != '\0');
     }
-    do {
-        if (*p == a1)
-            v0 = a0 + (p - (char *)Ra0);
-    } while (*p++ != '\0');
 
     pc0 = ra;
 }
