@@ -30,6 +30,8 @@
 
 // TODO: implement all system calls, count the exact CPU cycles of system calls.
 
+#include "psxhle-filesystem.h"
+
 #include "psxbios.h"
 #include "psxhw.h"
 #include "gpu.h"
@@ -1473,6 +1475,7 @@ void psxBios_calloc() { // 0x37
 void psxBios_realloc() { // 0x38
     u32 block = a0;
     u32 size = a1;
+
     PSXBIOS_LOG("psxBios_%s\n", biosA0n[0x38]);
 
     a0 = block;
@@ -1756,6 +1759,30 @@ void psxBios_Exec() { // 43
     ra = 0x8000;
     pc0 = header->_pc0;
 }
+#if HLE_ENABLE_LOADEXEC
+//extern void         psxFs_CacheFilesystem();
+//extern bool         psxFs_LoadExecutableHeader(const char* path, EXE_HEADER& dest);
+//extern psdisc_sec_t psxFs_GetFileSector(const char* path);
+//extern intmax_t     psxFs_GetFileSize(const char* path);
+//extern bool         psxFs_ReadSectorData2048(void* dest,  psdisc_sec_t sector, int nSectors=1);
+
+void psxBios_LoadExec() { // 51
+    auto header = (EXEC_DESCRIPTOR*)PSXM(0xf000);
+    u32 s_addr, s_size;
+
+    PSXBIOS_LOG("psxBios_%s: %s: %x,%x\n", biosA0n[0x51], Ra0, a1, a2);
+    s_addr = a1; s_size = a2;
+
+    a1 = 0xf000;	
+    psxBios_Load();
+
+    header->s_addr = s_addr;
+    header->s_size = s_size;
+
+    a0 = 0xf000; a1 = 0; a2 = 0;
+    psxBios_Exec();
+}
+#endif
 
 void psxBios_FlushCache() { // 44
     PSXBIOS_LOG("psxBios_%s\n", biosA0n[0x44]);
@@ -1873,23 +1900,6 @@ void psxBios_get_cd_status(void) //a6
 {
     v0 = 1;
     pc0 = ra;
-}
-
-void psxBios_LoadExec() { // 51
-    EXEC *header = (EXEC*)PSXM(0xf000);
-    u32 s_addr, s_size;
-
-    PSXBIOS_LOG("psxBios_%s: %s: %x,%x\n", biosA0n[0x51], Ra0, a1, a2);
-    s_addr = a1; s_size = a2;
-
-    a1 = 0xf000;
-    psxBios_Load();
-
-    header->S_addr = s_addr;
-    header->s_size = s_size;
-
-    a0 = 0xf000; a1 = 0; a2 = 0;
-    psxBios_Exec();
 }
 
 void psxBios__bu_init() { // 70
@@ -3098,15 +3108,30 @@ void psxBios_SysDeqIntRP() { // 03
     v0 = 0; pc0 = ra;
 }
 
-void psxBios_dummy() {
-    PSXBIOS_LOG("unk %x call: %x\n", pc0 & 0x1fffff, t1);
-    pc0 = ra;
-}
+using VoidFnptr = void (*)();
 
-void (*biosA0[256])();
-void (*biosB0[256])();
-void (*biosC0[256])();
+using HLE_BIOS_TABLE = VoidFnptr[256]; 
 
+HLE_BIOS_TABLE biosA0 = {};
+HLE_BIOS_TABLE biosB0 = {};
+HLE_BIOS_TABLE biosC0 = {};
+
+
+VoidFnptr HLE_Call_Table[SCRI_MAX_COUNT];
+
+void HleInitCallTable() {
+
+    HLE_Call_Table[SCRI_DeliverEvent_Resume     ] = HLEcb_DeliverEvent_Resume;
+    HLE_Call_Table[SCRI_psxBios_DeliverEvent_00 ] = psxBios_DeliverEvent     ;
+    HLE_Call_Table[SCRI_psxBios__bu_init_00     ] = psxBios__bu_init         ;
+    HLE_Call_Table[SCRI_psxBios__bu_init_01     ] = psxBios__bu_init         ;
+    HLE_Call_Table[SCRI_psxBios__bu_init_02     ] = psxBios__bu_init         ;
+    HLE_Call_Table[SCRI_psxBios__card_load_00   ] = psxBios__card_load       ;
+    HLE_Call_Table[SCRI_psxBios__card_info_00   ] = psxBios__card_info       ;
+    HLE_Call_Table[SCRI_psxBios__card_read_00   ] = psxBios__card_read       ;
+    HLE_Call_Table[SCRI_psxBios__card_write_00  ] = psxBios__card_write      ;
+
+};
 #include "sjisfont.h"
 
 void psxBiosResetToNone() {
@@ -3118,7 +3143,8 @@ void psxBiosResetToNone() {
     }
 }
 void psxBiosInit_StdLib() {
-    //HleInitCallTable();
+    HleInitCallTable();
+
     biosA0[0x3e] = psxBios_puts;
     biosA0[0x3f] = psxBios_printf;
 

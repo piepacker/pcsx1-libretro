@@ -8,7 +8,7 @@
 // The EXE_HEADER is only needed within the file itself. The descriptor is maintained separately within
 // the HLE BIOS implementation.
 
-struct EXE_HEADER {
+struct PSX_EXE_HEADER {
     uint8_t  id[8];
     uint32_t text;
     uint32_t data;
