@@ -1731,25 +1731,25 @@ void psxBios_Load() { // 0x42
  */
 
 void psxBios_Exec() { // 43
-    EXEC *header = (EXEC*)Ra0;
+    auto header = (EXEC_DESCRIPTOR*)Ra0;
     u32 tmp;
 
     PSXBIOS_LOG("psxBios_%s: %x, %x, %x\n", biosA0n[0x43], a0, a1, a2);
 
-    header->_sp = sp;
-    header->_fp = fp;
-    header->_sp = sp;
-    header->_gp = gp;
-    header->ret = ra;
-    header->base = s0;
+    header->SavedSP = sp;
+    header->SavedFP = fp;
+    header->SavedSP = sp;
+    header->SavedGP = gp;
+    header->SavedRA = ra;
+    header->SavedS0 = s0;
 
-    if (header->S_addr != 0) {
-        tmp = header->S_addr + header->s_size;
+    if (header->s_addr != 0) {
+        tmp = header->s_addr + header->s_size;
         sp = tmp;
         fp = sp;
     }
 
-    gp = header->gp0;
+    gp = header->_gp;
 
     s0 = a0;
 
@@ -1757,7 +1757,7 @@ void psxBios_Exec() { // 43
     a1 = a2;
 
     ra = 0x8000;
-    pc0 = header->_pc0;
+    pc0 = header->_pc;
 }
 #if HLE_ENABLE_LOADEXEC
 //extern void         psxFs_CacheFilesystem();
