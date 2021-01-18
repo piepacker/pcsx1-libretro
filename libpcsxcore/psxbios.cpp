@@ -3656,6 +3656,7 @@ void psxBiosShutdown() {
     } \
 }
 
+#if HLE_ENABLE_EXCEPTION
 void biosInterrupt() {
     int bufcount;
 
@@ -3738,6 +3739,13 @@ void biosInterrupt() {
     }
 }
 
+void psxBiosException180() {
+    // bfc00180 exception vector, which occurs when an exception occurs from the exception handler.
+    // normally this never happens, usually indicates a bug in the emulator.
+
+    assert(false);
+}
+
 void psxBiosException80() {
     int i;
 
@@ -3745,6 +3753,7 @@ void psxBiosException80() {
   {
    "INT", "MOD", "TLBL", "TLBS", "ADEL", "ADES", "IBE", "DBE", "SYSCALL", "BP", "RI", "COPU", "OV", NULL, NULL, NULL
   };
+
     auto excode = (CP0_CAUSE & 0x3c) >> 2;
     switch (excode) {
         case 0x00: // Interrupt
@@ -3800,6 +3809,7 @@ void psxBiosException80() {
                 case 2: // ExitCritical - enable irq's
                     CP0_STATUS |= 0x404; 
                     break;
+
                 /* Normally this should cover SYS(00h, SYS(04h but they don't do anything relevant so... */
                 default:
                     break;
@@ -3813,9 +3823,11 @@ void psxBiosException80() {
         case 0xa:  // Reserved instruction exception
             assert(false);
         break;
+
         case 0xb:  // Reserved instruction exception
             assert(false);
         break;
+
         default:
             PSXBIOS_LOG("unknown bios exception 0x%x (%s)\n", excode, exmne[excode]);
             break;
@@ -3827,6 +3839,7 @@ void psxBiosException80() {
     CP0_STATUS = (CP0_STATUS & 0xfffffff0) |
                 ((CP0_STATUS & 0x3c) >> 2);
 }
+#endif
 
 #define bfreeze(ptr, size) { \
     if (Mode == 1) memcpy(&psxR[base], ptr, size); \
