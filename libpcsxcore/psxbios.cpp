@@ -1955,6 +1955,13 @@ void psxBios_GPU_GetGPUStatus() { // 0x4d
 
 #undef s_addr
 
+/* TODO FIXME : Not compliant. -1 indicates failure but using 1 for now. */
+void psxBios_get_cd_status(void) //a6
+{
+    v0 = 1;
+    pc0 = ra;
+}
+
 void psxBios_LoadExec() { // 51
     EXEC *header = (EXEC*)PSXM(0xf000);
     u32 s_addr, s_size;
@@ -1994,22 +2001,22 @@ void psxBios__96_remove() { // 72
 }
 
 void psxBios_SetMem() { // 9f
-    u32 pnew = psxHu32(0x1060);
+    u32 nx = psxHu32(0x1060);
 
     PSXBIOS_LOG("psxBios_%s: %x, %x\n", biosA0n[0x9f], a0, a1);
 
     switch(a0) {
         case 2:
-            psxHu32ref(0x1060) = SWAP32(pnew);
+            psxHu32ref(0x1060) = SWAP32(nx);
             psxMu32ref(0x060) = a0;
             SysPrintf("Change effective memory : %d MBytes\n",a0);
             break;
 
         case 8:
-            psxHu32ref(0x1060) = SWAP32(pnew | 0x300);
+            psxHu32ref(0x1060) = SWAP32(nx | 0x300);
             psxMu32ref(0x060) = a0;
             SysPrintf("Change effective memory : %d MBytes\n",a0);
-
+    
         default:
             SysPrintf("Effective memory must be 2/8 MBytes\n");
         break;
@@ -2018,12 +2025,6 @@ void psxBios_SetMem() { // 9f
     pc0 = ra;
 }
 
-/* TODO FIXME : Not compliant. -1 indicates failure but using 1 for now. */
-void psxBios_get_cd_status(void) //a6
-{
-    v0 = 1;
-    pc0 = ra;
-}
 
 void psxBios__card_info() { // ab
     PSXBIOS_LOG("psxBios_%s: %x\n", biosA0n[0xab], a0);
@@ -2067,6 +2068,7 @@ void psxBios__card_load() { // ac
 
 /* System calls B0 */
 
+#if HLE_ENABLE_RCNT
 void psxBios_SetRCnt() { // 02
     PSXBIOS_LOG("psxBios_%s\n", biosB0n[0x02]);
 
@@ -2074,14 +2076,14 @@ void psxBios_SetRCnt() { // 02
     if (a0 != 3) {
         u32 mode=0;
 
-        psxRcntWtarget(a0, a1);
         if (a2&0x1000) mode|= 0x050; // Interrupt Mode
         if (a2&0x0100) mode|= 0x008; // Count to 0xffff
         if (a2&0x0010) mode|= 0x001; // Timer stop mode
         if (a0 == 2) { if (a2&0x0001) mode|= 0x200; } // System Clock mode
         else         { if (a2&0x0001) mode|= 0x100; } // System Clock mode
 
-        psxRcntWmode(a0, mode);
+        RCNT_SetMode (a0, mode);
+        RCNT_SetCount(a0, a1);
     }
     pc0 = ra;
 }
@@ -2090,8 +2092,8 @@ void psxBios_GetRCnt() { // 03
     PSXBIOS_LOG("psxBios_%s\n", biosB0n[0x03]);
 
     a0&= 0x3;
-    if (a0 != 3) v0 = psxRcntRcount(a0);
-    else v0 = 0;
+    v0 = 0;
+    if (a0 < 3) v0 = RCNT_GetCount(a0);
     pc0 = ra;
 }
 
@@ -2099,17 +2101,26 @@ void psxBios_StartRCnt() { // 04
     PSXBIOS_LOG("psxBios_%s\n", biosB0n[0x04]);
 
     a0&= 0x3;
-    if (a0 != 3) psxHu32ref(0x1074)|= SWAP32((u32)((1<<(a0+4))));
-    else psxHu32ref(0x1074)|= SWAPu32(0x1);
-    v0 = 1; pc0 = ra;
+
+    auto imask = Read_IMASK();
+    if (a0 != 3) { imask |= SWAP32((u32)((1<<(a0+4)))); }
+    else         { imask |= SWAPu32(0x1); }
+    Write_IMASK(imask);
+
+    v0 = 1;
+    pc0 = ra;
 }
 
 void psxBios_StopRCnt() { // 05
     PSXBIOS_LOG("psxBios_%s\n", biosB0n[0x05]);
 
     a0&= 0x3;
-    if (a0 != 3) psxHu32ref(0x1074)&= SWAP32((u32)(~(1<<(a0+4))));
-    else psxHu32ref(0x1074)&= SWAPu32(~0x1);
+
+    auto imask = Read_IMASK();
+    if (a0 != 3) { imask &= ~SWAP32((u32)((1<<(a0+4)))); }
+    else         { imask &= ~SWAPu32(0x1); }
+    Write_IMASK(imask);
+
     pc0 = ra;
 }
 
@@ -2118,15 +2129,29 @@ void psxBios_ResetRCnt() { // 06
 
     a0&= 0x3;
     if (a0 != 3) {
-        psxRcntWmode(a0, 0);
-        psxRcntWtarget(a0, 0);
-        psxRcntWcount(a0, 0);
+        RCNT_SetCount (a0, 0);
+        RCNT_SetMode  (a0, 0);
+        RCNT_SetTarget(a0, 0);
     }
     pc0 = ra;
 }
 
+void psxBios_ChangeClearRCnt() { // 0a
+    u32 *ptr;
 
-/* gets ev for use with EventCB */
+    PSXBIOS_LOG("psxBios_%s: %x, %x\n", biosC0n[0x0a], a0, a1);
+
+    ptr = (u32*)PSXM((a0 << 2) + 0x8600);
+    v0 = *ptr;
+    *ptr = a1;
+
+//	psxRegs.CP0.n.Status|= 0x404;
+    pc0 = ra;
+}
+#endif
+
+#if HLE_ENABLE_EVENT
+/* gets ev for use with Event */
 #define GetEv() \
     ev = (a0 >> 24) & 0xf; \
     if (ev == 0xf) ev = 0x5; \
@@ -2196,6 +2221,8 @@ void psxBios_WaitEvent() { // 0a
 
     PSXBIOS_LOG("psxBios_%s %x,%x\n", biosB0n[0x0a], ev, spec);
 
+    assert(spec < 32);
+
     if (EventCB[ev][spec].status == EvStUNUSED)
     {
         v0 = 0;
@@ -2206,14 +2233,15 @@ void psxBios_WaitEvent() { // 0a
     if (EventCB[ev][spec].status == EvStALREADY)
     {
         /* Callback events (mode=EvMdINTR) do never set the ready flag (and thus WaitEvent would hang forever). */
-        if (!(EventCB[ev][spec].mode == EvMdINTR)) EventCB[ev][spec].status = EvStACTIVE;
+        if (!(EventCB[ev][spec].mode == EvMdINTR)) {
+            EventCB[ev][spec].status = EvStACTIVE;
+        }
         v0 = 1;
         pc0 = ra;
         return;
     }
 
     v0 = 0;
-    pc0 = ra;
 }
 
 void psxBios_TestEvent() { // 0b
@@ -2222,17 +2250,21 @@ void psxBios_TestEvent() { // 0b
     ev   = a0 & 0xff;
     spec = (a0 >> 8) & 0xff;
 
-    if (EventCB[ev][spec].status == EvStALREADY)
-    {
-        if (!(EventCB[ev][spec].mode == EvMdINTR)) EventCB[ev][spec].status = EvStACTIVE;
+    PSXBIOS_LOG_SPAM("TestEvent");
+
+    assert(spec < 32);
+
+    if (EventCB[ev][spec].status == EvStALREADY) {
+        if (!(EventCB[ev][spec].mode == EvMdINTR)) {
+            EventCB[ev][spec].status = EvStACTIVE;
+        }
         v0 = 1;
     }
-    else
-    {
+    else {
         v0 = 0;
     }
 
-    PSXBIOS_LOG("psxBios_%s %x,%x: %x\n", biosB0n[0x0b], ev, spec, v0);
+    PSXBIOS_LOG("psxBios_%s %x,%x: result=%x\n", biosB0n[0x0b], ev, spec, v0);
 
     pc0 = ra;
 }
@@ -2262,7 +2294,9 @@ void psxBios_DisableEvent() { // 0d
 
     v0 = 1; pc0 = ra;
 }
+#endif
 
+#if HLE_ENABLE_THREAD
 /*
  *	long OpenTh(long (*func)(), unsigned long sp, unsigned long gp);
  */
@@ -2270,20 +2304,18 @@ void psxBios_DisableEvent() { // 0d
 void psxBios_OpenTh() { // 0e
     int th;
 
-    for (th=1; th<8; th++)
-    {
+    for (th=1; th<8; th++) {
         if (ThreadCB[th].status == 0) break;
-
     }
+
     if (th == 8) {
         // Feb 2019 - Added out-of-bounds fix caught by cppcheck:
         // When no free TCB is found, return 0xffffffff according to Nocash doc.
-        PSXBIOS_LOG("\t%s() WARNING! No Free TCBs found!\n", __func__);
+        PSXBIOS_LOG("psxBios_OpenTh() WARNING! No Free TCBs found!\n");
         v0 = 0xffffffff;
         pc0 = ra;
         return;
     }
-
     PSXBIOS_LOG("psxBios_%s: %x\n", biosB0n[0x0e], th);
 
     ThreadCB[th].status = 1;
@@ -2303,6 +2335,8 @@ void psxBios_CloseTh() { // 0f
 
     PSXBIOS_LOG("psxBios_%s: %x\n", biosB0n[0x0f], th);
 
+    assert((u32)th < 8);
+
     /* The return value is always 1 (even if the handle was already closed). */
     v0 = 1;
     if (ThreadCB[th].status != 0) {
@@ -2318,27 +2352,33 @@ void psxBios_CloseTh() { // 0f
 
 void psxBios_ChangeTh() { // 10
     int th = a0 & 0xff;
+    PSXBIOS_LOG("psxBios_%s: %x\n", biosB0n[0x10], th);
 
-//	PSXBIOS_LOG("psxBios_%s: %x\n", biosB0n[0x10], th);
+    assert((u32)th < 8);
 
     /* The return value is always 1. */
     v0 = 1;
+
     if (ThreadCB[th].status == 0 || CurThread == th) {
         pc0 = ra;
     } else {
-        if (ThreadCB[CurThread].status == 2) {
-            ThreadCB[CurThread].status = 1;
-            ThreadCB[CurThread].func = ra;
-            memcpy(ThreadCB[CurThread].reg, psxRegs.GPR.r, 32*4);
+        if ((u32)CurThread < 8) {
+            if (ThreadCB[CurThread].status == 2) {
+                ThreadCB[CurThread].status = 1;
+                ThreadCB[CurThread].func = ra;
+                memcpy(ThreadCB[CurThread].reg, GPR_ARRAY, sizeof(ThreadCB[CurThread].reg));
+            }
         }
 
-        memcpy(psxRegs.GPR.r, ThreadCB[th].reg, 32*4);
+        memcpy(GPR_ARRAY, ThreadCB[th].reg, sizeof(ThreadCB[CurThread].reg));
         pc0 = ThreadCB[th].func;
         ThreadCB[th].status = 2;
         CurThread = th;
     }
 }
+#endif
 
+#if HLE_ENABLE_PAD
 void psxBios_InitPAD() { // 0x12
     PSXBIOS_LOG("psxBios_%s\n", biosB0n[0x12]);
 
@@ -2393,6 +2433,7 @@ void psxBios_ChangeClearPad() { // 5b
 
     pc0 = ra;
 }
+#endif
 
 #if HLE_ENABLE_ENTRYINT
 static unsigned interrupt_r26 = 0x8004E8B0;
@@ -3039,19 +3080,6 @@ void psxBios_SysDeqIntRP() { // 03
     v0 = 0; pc0 = ra;
 }
 
-void psxBios_ChangeClearRCnt() { // 0a
-    u32 *ptr;
-
-    PSXBIOS_LOG("psxBios_%s: %x, %x\n", biosC0n[0x0a], a0, a1);
-
-    ptr = (u32*)PSXM((a0 << 2) + 0x8600);
-    v0 = *ptr;
-    *ptr = a1;
-
-//	psxRegs.CP0.n.Status|= 0x404;
-    pc0 = ra;
-}
-
 void psxBios_dummy() {
     PSXBIOS_LOG("unk %x call: %x\n", pc0 & 0x1fffff, t1);
     pc0 = ra;
@@ -3264,9 +3292,7 @@ void psxBiosInitFull() {
     //biosA0[0x9d] = psxBios_GetConf;
     //biosA0[0x9e] = psxBios_sys_a0_9e;
 
-#if 0
     biosA0[0x9f] = psxBios_SetMem;
-#endif
 
     //biosA0[0xa0] = psxBios__boot;
     //biosA0[0xa1] = psxBios_SystemError;
