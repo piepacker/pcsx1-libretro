@@ -43,6 +43,9 @@
 #include <string>
 #include <map>
 
+#define HLE_MEDNAFEN_IFC 0
+#define HLE_PCSX_IFC     1
+
 extern char McdDisable[2];
 
 static bool s_suppress_spam = 0;
@@ -88,12 +91,12 @@ static bool is_suppressed(const char* check) {
 #define HLE_ENABLE_EVENT        (HLE_FULL || 1)
 #define HLE_ENABLE_LOADEXEC		(HLE_FULL || 1)       // depends on ISO9660 filesystem API
 
-#define HLE_ENABLE_FILEIO		(HLE_FULL && 1)       // fileio depends on HLE memcard ?
-#define HLE_ENABLE_PAD			(HLE_FULL && 1)
-#define HLE_ENABLE_ENTRYINT     (HLE_FULL && 1)
+#define HLE_ENABLE_FILEIO		(HLE_PCSX_IFC || (HLE_FULL && 1))       // fileio depends on HLE memcard ?
+#define HLE_ENABLE_PAD			(HLE_PCSX_IFC || (HLE_FULL && 1))
+#define HLE_ENABLE_ENTRYINT     (HLE_PCSX_IFC || (HLE_FULL && 1))
 
-#define HLE_ENABLE_FINDFILE     (HLE_FULL && 0)
-#define HLE_ENABLE_FORMAT       (HLE_FULL && 0)
+#define HLE_ENABLE_FINDFILE     (0            || (HLE_FULL && 0))
+#define HLE_ENABLE_FORMAT       (0            || (HLE_FULL && 0))
 
 
 // qsort needs to be rewritten before it can be enabled. And once rewritten, probably can remove
@@ -240,8 +243,6 @@ const char * const biosC0n[256] = {
     "_circputc",		  "ioabort",			"sys_c0_1a",		"KernelRedirect",
     "PatchAOTable",
 };
-#define HLE_MEDNAFEN_IFC 0
-#define HLE_PCSX_IFC     1
 
 #if HLE_PCSX_IFC
 #define PSX_RAM_START (psxM)
@@ -2173,8 +2174,6 @@ void psxBios_TestEvent() { // 0b
     ev   = a0 & 0xff;
     spec = (a0 >> 8) & 0xff;
 
-    PSXBIOS_LOG_SPAM("TestEvent");
-
     assert(spec < 32);
 
     if (EventCB[ev][spec].status == EvStALREADY) {
@@ -2187,7 +2186,7 @@ void psxBios_TestEvent() { // 0b
         v0 = 0;
     }
 
-    PSXBIOS_LOG("psxBios_%s %x,%x: result=%x\n", biosB0n[0x0b], ev, spec, v0);
+    PSXBIOS_LOG_SPAM("TestEvent", "psxBios_%s %x,%x: result=%x\n", biosB0n[0x0b], ev, spec, v0);
 
     pc0 = ra;
 }
