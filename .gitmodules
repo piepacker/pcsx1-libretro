@@ -4,3 +4,9 @@
 [submodule "warm"]
 	path = frontend/warm
 	url = git://notaz.gp2x.de/~notaz/warm.git
+[submodule "icystdlib"]
+	path = icystdlib
+	url = D:/piepacker/duckstation/dep/icystdlib
+[submodule "libpsdisc"]
+	path = libpsdisc
+	url = D:/piepacker/duckstation/dep/libpsdisc/

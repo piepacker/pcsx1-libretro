@@ -124,6 +124,20 @@ endif
 # misc
 OBJS += frontend/main.o frontend/plugin.o
 
+OBJS += icystdlib/src/filesystem.msw.o
+OBJS += icystdlib/src/fs.o
+OBJS += icystdlib/src/logger_local_buffer.o
+OBJS += icystdlib/src/msw_app_console_init.o
+OBJS += icystdlib/src/msw-printf-stdout.o
+OBJS += icystdlib/src/posix_file.o
+OBJS += icystdlib/src/StringUtil.o
+
+
+icystdlib/%.o : 
+    CXXFLAGS += -Iicystdlib/inc -lstdc++fs -std=c++17
+    CXXFLAGS += -Iicystdlib/icy-app-glue
+    CXXFLAGS += --include=fi-platform-defines.h
+    CXXFLAGS += --include=icystdlib/fi-projdir-BuildConfig.h
 
 frontend/menu.o frontend/main.o: frontend/revision.h
 frontend/plat_sdl.o frontend/libretro.o: frontend/revision.h
