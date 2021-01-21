@@ -136,6 +136,7 @@ OBJS += icystdlib/src/StringUtil.o
 icystdlib/%.o : 
     CXXFLAGS += -Iicystdlib/inc -lstdc++fs -std=c++17
     CXXFLAGS += -Iicystdlib/icy-app-glue
+    CXXFLAGS += -Ilibpsdisc/inc
     CXXFLAGS += --include=fi-platform-defines.h
     CXXFLAGS += --include=icystdlib/fi-projdir-BuildConfig.h
 

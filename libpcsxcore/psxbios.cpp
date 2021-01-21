@@ -30,12 +30,11 @@
 
 // TODO: implement all system calls, count the exact CPU cycles of system calls.
 
-#include "psxhle-filesystem.h"
 
 #include "psxbios.h"
-#include "psxhw.h"
-#include "gpu.h"
-#include "sio.h"
+#include "psxhle-filesystem.h"
+#include "psdisc-types.h"
+#include "jfmt.h"
 #include <zlib.h>
 
 #include <cstdint>
@@ -245,6 +244,10 @@ const char * const biosC0n[256] = {
 };
 
 #if HLE_PCSX_IFC
+#include "psxhw.h"
+#include "gpu.h"
+#include "sio.h"
+
 #define PSX_RAM_START (psxM)
 #define PSX_ROM_START (psxR)
 
@@ -333,6 +336,7 @@ static const uint32_t PS1_BiosRomEnd		= 0x1fc00000 + PS1_BIOSSIZE;
 
 #if HLE_MEDNAFEN_IFC
 #include "mednafen/psx/timer.h"
+#include "mednafen/psx/dis.h"
 
 #define RCNT_SetCount(rid, val)    TIMER_Write(0, ((rid) << 4) | 0x00, val)
 #define RCNT_SetMode(rid, val)     TIMER_Write(0, ((rid) << 4) | 0x04, val)
@@ -535,21 +539,6 @@ static u32 heap_size = 0;
 static u32 *heap_addr = NULL;
 static u32 *heap_end = NULL;
 #endif
-
-
-typedef struct {
-    u32 _pc0;
-    u32 gp0;
-    u32 t_addr;
-    u32 t_size;
-    u32 d_addr;
-    u32 d_size;
-    u32 b_addr;
-    u32 b_size;
-    u32 S_addr;
-    u32 s_size;
-    u32 _sp, _fp, _gp, ret, base;
-} EXEC;
 
 static FileDesc FDesc[32];
 
@@ -1688,7 +1677,9 @@ _start:
     pc0 = ra;
 }
 
+#if HLE_PCSX_IFC
 void psxBios_format() { // 0x41
+    PSXBIOS_LOG_NEW("format");
     if (strcmp(Ra0, "bu00:") == 0 && Config.Mcd1[0] != '\0')
     {
         CreateMcd(Config.Mcd1);
@@ -1707,25 +1698,7 @@ void psxBios_format() { // 0x41
     }
     pc0 = ra;
 }
-
-/*
- *	long Load(char *name, struct EXEC *header);
- */
-
-void psxBios_Load() { // 0x42
-    EXE_HEADER eheader;
-    void *pa1;
-
-    PSXBIOS_LOG("psxBios_%s: %s, %x\n", biosA0n[0x42], Ra0, a1);
-
-    pa1 = Ra1;
-    if (pa1 && LoadCdromFile(Ra0, &eheader) == 0) {
-        memcpy(pa1, ((char*)&eheader)+16, sizeof(EXEC));
-        v0 = 1;
-    } else v0 = 0;
-
-    pc0 = ra;
-}
+#endif
 
 /*
  *	int Exec(struct EXEC *header , int argc , char **argv);
@@ -1761,11 +1734,44 @@ void psxBios_Exec() { // 43
     pc0 = header->_pc;
 }
 #if HLE_ENABLE_LOADEXEC
-//extern void         psxFs_CacheFilesystem();
-//extern bool         psxFs_LoadExecutableHeader(const char* path, EXE_HEADER& dest);
-//extern psdisc_sec_t psxFs_GetFileSector(const char* path);
-//extern intmax_t     psxFs_GetFileSize(const char* path);
-//extern bool         psxFs_ReadSectorData2048(void* dest,  psdisc_sec_t sector, int nSectors=1);
+extern void         psxFs_CacheFilesystem();
+extern bool         psxFs_LoadExecutableHeader(const char* path, EXE_HEADER& dest);
+extern psdisc_sec_t psxFs_GetFileSector(const char* path);
+extern intmax_t     psxFs_GetFileSize(const char* path);
+extern bool         psxFs_ReadSectorData2048(void* dest,  psdisc_sec_t sector, int nSectors=1);
+
+void psxBios_Load() { // 0x42
+    PSXBIOS_LOG("psxBios_%s: %s, %x\n", biosA0n[0x42], Ra0, a1);
+
+    static_assert((sizeof(EXEC_DESCRIPTOR) + sizeof(PSX_EXE_HEADER)) == 76);
+
+    if (auto sector = psxFs_GetFileSector(Ra0)) {
+        uint8_t buf[2048];
+        psxFs_ReadSectorData2048(buf, sector);
+        memcpy(Ra0, buf, 76);
+        EXEC_DESCRIPTOR tdesc = *(EXEC_DESCRIPTOR*)(Ra0 + sizeof(EXE_HEADER));
+
+        if (auto* pa1 = (EXEC_DESCRIPTOR*)Ra1) {
+            *pa1 = tdesc;
+        }
+
+        for(int i=0; i<sizeof(tdesc) / 4; ++i) {
+            auto* val = (int32_t*)&tdesc + i;
+            *val = SWAP32(*val);
+        }
+
+        intmax_t text_addr = tdesc.t_addr;
+        intmax_t text_size = tdesc.t_size;
+        psxFs_ReadSectorData2048(PSXM(text_addr), sector+1, (text_size + 2047) / 2048);
+
+        v0 = 1;
+    }
+    else {
+        v0 = 0;
+    }
+
+    pc0 = ra;
+}
 
 void psxBios_LoadExec() { // 51
     auto header = (EXEC_DESCRIPTOR*)PSXM(0xf000);
@@ -1893,8 +1899,6 @@ void psxBios_GPU_GetGPUStatus() { // 0x4d
     pc0 = ra;
 }
 #endif
-
-#undef s_addr
 
 /* TODO FIXME : Not compliant. -1 indicates failure but using 1 for now. */
 void psxBios_get_cd_status(void) //a6
@@ -2901,6 +2905,7 @@ void psxBios_delete() { // 45
 #endif // HLE_ENABLE_FINDFILE
 #endif // HLE_ENABLE_FILEIO
 
+#if HLE_ENABLE_MCD
 void psxBios_InitCARD() { // 4a
     PSXBIOS_LOG("psxBios_%s: %x\n", biosB0n[0x4a], a0);
 
@@ -3005,6 +3010,8 @@ void psxBios__get_error(void) // 55
     pc0 = ra;
 }
 
+#endif
+
 void psxBios_Krom2RawAdd() { // 0x51
     int i = 0;
 
@@ -3060,6 +3067,7 @@ void psxBios_GetB0Table() { // 57
     v0 = 0x874; pc0 = ra;
 }
 
+#if HLE_ENABLE_MCD
 void psxBios__card_chan() { // 0x58
     PSXBIOS_LOG("psxBios_%s\n", biosB0n[0x58]);
 
@@ -3080,9 +3088,12 @@ void psxBios__card_wait() { // 5d
     v0 = 1;
     pc0 = ra;
 }
+#endif
+
 
 /* System calls C0 */
 
+#if HLE_ENABLE_ENTRYINT
 /*
  * int SysEnqIntRP(int index , long *queue);
  */
@@ -3105,6 +3116,11 @@ void psxBios_SysDeqIntRP() { // 03
     SysIntRP[a0] = 0;
 
     v0 = 0; pc0 = ra;
+}
+#endif
+void psxBios_dummy() {
+    PSXBIOS_LOG("unk %x call: %x\n", pc0 & 0x1fffff, t1);
+    pc0 = ra;
 }
 
 using VoidFnptr = void (*)();
@@ -3131,6 +3147,7 @@ void HleInitCallTable() {
     HLE_Call_Table[SCRI_psxBios__card_write_00  ] = psxBios__card_write      ;
 
 };
+
 #include "sjisfont.h"
 
 void psxBiosResetToNone() {
@@ -3141,7 +3158,9 @@ void psxBiosResetToNone() {
         biosC0[i] = NULL;
     }
 }
+
 void psxBiosInit_StdLib() {
+
     HleInitCallTable();
 
     biosA0[0x3e] = psxBios_puts;
@@ -3151,14 +3170,13 @@ void psxBiosInit_StdLib() {
     biosB0[0x3f] = psxBios_puts;
 
 #if HLE_ENABLE_FILEIO
-
-
     biosA0[0x00] = psxBios_open;
     biosA0[0x01] = psxBios_lseek;
     biosA0[0x02] = psxBios_read;
     biosA0[0x03] = psxBios_write;
     biosA0[0x04] = psxBios_close;
 #endif
+
     //biosA0[0x05] = psxBios_ioctl;
     //biosA0[0x06] = psxBios_exit;
     //biosA0[0x07] = psxBios_sys_a0_07;
@@ -3201,10 +3219,13 @@ void psxBiosInit_StdLib() {
     biosA0[0x2e] = psxBios_memchr;
     biosA0[0x2f] = psxBios_rand;
     biosA0[0x30] = psxBios_srand;
+
 #if HLE_ENABLE_QSORT
     biosA0[0x31] = psxBios_qsort;
 #endif
+
     //biosA0[0x32] = psxBios_strtod;
+
 #if HLE_ENABLE_HEAP
     if (hle_config_env_heap()) {
     biosA0[0x33] = psxBios_malloc;
@@ -3216,12 +3237,15 @@ void psxBiosInit_StdLib() {
     biosA0[0x39] = psxBios_InitHeap;
     }
 #endif
+
     //biosA0[0x3a] = psxBios__exit;
     biosA0[0x3b] = psxBios_getchar;
-    biosA0[0x3c] = psxBios_putchar;
+    biosA0[0x3c] = psxBios_putchar;	
     //biosA0[0x3d] = psxBios_gets;
+
     biosB0[0x56] = psxBios_GetC0Table;
     biosB0[0x57] = psxBios_GetB0Table;
+
     biosA0[0x44] = psxBios_FlushCache;
 }
 
@@ -3584,7 +3608,7 @@ void psxBiosInitFull() {
 #if HLE_FULL
     if (hle_config_env_full()) {
         is_hle_full_mode = 1;
-        //psxFs_CacheFilesystem();
+        psxFs_CacheFilesystem();
 
         // not sure about these, the HLE seems to skip them which, I expect, is only wise
         // if we're bypassing BIOS entirely. --jstine
@@ -3665,6 +3689,179 @@ void psxBiosInitFull() {
 void psxBiosShutdown() {
 }
 
+#include "StringTokenizer.h"
+#include "StringUtil.h"
+
+
+const char* uri_find_domain_colon(const char* src) {
+    // tricky: colon is technically a legal filename character if it occurs after a forward slash.
+    const char* scan = src;
+    while (scan[0] && scan[0] != '/' && scan[0] != ':') ++scan;
+    if (scan[0] == ':') {
+        return scan;
+    }
+    return nullptr;
+}
+
+void psxBiosLoadExecCdrom() {
+    psxFs_CacheFilesystem();
+
+    std::string exepath;
+    if (auto sector = psxFs_GetFileSector("/SYSTEM.CNF;1")) {
+        uint8_t buf[2048];
+        psxFs_ReadSectorData2048(buf, sector);
+        auto alltok = Tokenizer((char*)buf);
+        while (auto line = alltok.GetNextToken("\r\n")) {
+            auto linetok = Tokenizer(line);
+            if (auto lvalue  = linetok.GetNextToken('=')) {
+                auto rvalue  = linetok.GetNextToken();
+
+                PSXBIOS_LOG("%s=%s\n", lvalue, rvalue);
+
+                if (strcasecmp(lvalue, "boot") == 0) {
+                    if (rvalue) {
+                        exepath = rvalue;
+                    }
+                    else {
+                        printf("[ERROR]: SYSTEM.CNF is invalid: BOOT lvalue does not have a valid rvalue.\n");
+                    }
+
+                    // this shouldn't really ever happen so let's assert by default in debug builds.
+                    // probably it's a bug in the parsing logic here, rather than user error.
+                    assert(rvalue);
+                }
+            }
+        }
+    }
+    else {
+        printf("[INFO]: SYSTEM.CNF not found. Falling back on PSX.EXE...\n");
+    }
+
+    if (exepath.empty()) {
+        exepath = "cdrom:///PSX.EXE";
+    }
+
+    // FIXUP all incorrect URI prefixes.
+    // Favor triple-slash prefix, since the world of browsers adhere to it.
+    //
+    // This fixup is only needed when reading legacy SYSTEM.CNF.
+    // Homebrew should either assume to adhere to SYSTEM.CNF specs, or should endeavor to define and use
+    // an alternative method of defining the executable and parameters for starting the application, one
+    // in which a strict conformance can be enforced for the good and sanity of debugging these behaviors.
+    //
+    // Also it is strongly recommended not to use URIs at all, as these are overly complicated for the purposes
+    // of both game and emulator development. Simple mount prefixes are superior, and then the prefixes can
+    // be remapped at the system level to a devs hearts content.
+    //   /cdrom0/path/to/file  vs. cdrom:///path/to/file
+
+
+    // Interesting aside: most uses of cdrom: mount points (schemes) are technically incorrect for all URI mount points
+    // on PSX. The // should only be used when referencing remote server names. For example, correct notation would be:
+    //   cdrom:/SYSTEM.CNF                 (local cdrom, absolute/rooted)
+    //   cdrom:///SYSTEM.CNF               (local cdrom, remote machine name is specified as empty)
+    //   cdrom://machine2.org/SYSTEM.CNF   (remote machine 'machine2.org' should be referenced)
+    //
+    // Of special note, this form is considered invalid because relative file URIs are not allowed:
+    //   cdrom:SYSTEM.CNF                 (common behavior is to accept this and assume absolute)
+    //
+    // (more trivia) By the rule of URIs, http:page and http:///page should probably be equivalent to http://127.0.0.1/page
+    // except that there's no official statement that 127.0.0.1 or localhost references a local http host (typically it is
+    // treated as a remote name that loops back into the host machine in the backend). Moreover, browsers elected to have
+    // these forms be converted into remote server names (slugs), if a localhost is not available, eg:
+    //  https:page    -> https://page
+    //  https:///page -> https://page
+    //
+    // Which is pretty great when you consider browsers do the opposite for file, assuming that the user's intent is to
+    // reference a local resource and thus NOP out the apparent attempt to provide a slug (further complicated on windows,
+    // where browsers may attempt to use the presence of the c:\ drive specifier to decide if the URI is intended to
+    // refer to a local or remote authority). Note also that browsers favor the triple-slash, file:///, even though the URI
+    // standard seems to prefer the single-slash option.
+    //
+    // Here's how browsers will infer two otherwise-invalid file scheme URIs:
+    //  file:tmp      -> file:///tmp
+    //  file://tmp    -> file:///tmp
+
+    auto first_nonslash = [](const char* s) {
+        if (s[0] != '/' && s[0] != '\\') return s+0;
+        if (s[1] != '/' && s[1] != '\\') return s+1;
+        if (s[2] != '/' && s[2] != '\\') return s+2;
+
+        assert(s[3] != '/' && s[3] != '\\');
+        return s+3;
+    };
+
+    static const char mnt_cdrom[] = "cdrom:";
+
+    const char* mount = nullptr;
+    const char* post_colon_ptr = nullptr;
+
+    const char* exedata = exepath.c_str();
+
+    if(strncasecmp(exedata, mnt_cdrom, sizeof(mnt_cdrom)-1) == 0) {
+        mount = mnt_cdrom;
+        post_colon_ptr = exedata + sizeof(mnt_cdrom)-1;
+    }
+
+    if (post_colon_ptr) {
+        int colon_pos = (post_colon_ptr - exedata);
+        if (!colon_pos) {
+            PSXBIOS_LOG("Suspicious looking BOOT = %s", exedata);
+            mount = mnt_cdrom;
+        }
+    }
+    else {
+        post_colon_ptr = exedata;
+    }
+
+    if (auto sector = psxFs_GetFileSector(first_nonslash(post_colon_ptr))) {
+        uint8_t buf[2048];
+        const char id[] = "PS-X EXE";
+
+        psxFs_ReadSectorData2048(buf, sector);
+        memcpy(Ra0, buf, 76);
+        EXEC_DESCRIPTOR tdesc = *(EXEC_DESCRIPTOR*)(Ra0 + sizeof(EXE_HEADER));
+
+        if (auto* pa1 = (EXEC_DESCRIPTOR*)Ra1) {
+            *pa1 = tdesc;
+        }
+
+        for(int i=0; i<sizeof(tdesc) / 4; ++i) {
+            auto* val = (int32_t*)&tdesc + i;
+            *val = SWAP32(*val);
+        }
+
+        intmax_t text_addr = tdesc.t_addr & 0x1fffffff;
+        intmax_t text_size = tdesc.t_size;
+        auto* ramdest = PSXM(text_addr);
+        if (psxFs_ReadSectorData2048(ramdest, sector+1, (text_size + 2047) / 2048) == 0) {
+            printf("It failed!\n");
+            assert(false);
+        }
+
+        // DUMP! donotcheckin
+        if (0) {
+            auto* insnptr = (uint32_t*)ramdest;
+            for (int i=0; i<text_size; i+=4) {
+                printf( "[MIPS] %06jx:%08jx %s\n", JFMT(text_addr) + i, JFMT((uint32_t&)ramdest[i]), DisassembleMIPS(text_addr + i, (uint32_t&)ramdest[i]).c_str());
+            }
+        }
+
+        pc0 = tdesc._pc;
+        gp  = tdesc._gp;
+        sp  = tdesc.s_addr ? tdesc.s_addr : 0x801fff00;
+
+
+        CP0_STATUS &= ~(1ull << 22);	// BEV  (bootstrap)
+        CP0_STATUS |=  (7ull << 28);   // enable COP0,1,2
+        assert((CP0_STATUS & (1<<31)) == 0);
+
+        PSX_CPU->BACKED_new_PC = PSX_CPU->BACKED_PC + 4;
+    }
+    else {
+        printf("[ERROR]: Failed to load boot executable: %s\n", exedata);
+    }
+}
+
 #define psxBios_PADpoll(pad) { \
     PAD##pad##_startPoll(pad); \
     pad_buf##pad[0] = 0; \
@@ -3688,6 +3885,7 @@ void biosInterrupt() {
     // Looks like this is polling the pads on every interrupt, which is definitely
     // not what we want. Will have to dig into it later and see if I can figure out why
     // someone removed the Vsync condition gate below (likely some hack) --jstine
+
 //	if (Read_ISTAT() & 0x1) { // Vsync
         if (pad_buf != NULL) {
             u32 *buf = (u32*)pad_buf;
@@ -3785,9 +3983,7 @@ void psxBiosException80() {
             interrupt_r26=psxRegs.CP0.n.EPC;
 //			PSXCPU_LOG("interrupt\n");
             SaveRegs();
-
             sp = psxMu32(0x6c80); // create new stack for interrupt handlers
-
             biosInterrupt();
 
             for (i = 0; i < 8; i++) {
