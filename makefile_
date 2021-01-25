@@ -2,9 +2,9 @@
 
 # default stuff goes here, so that config can override
 TARGET ?= pcsx
-CFLAGS += -Wall -ggdb -Iinclude -ffast-math
+CFLAGS += -Wall -g -Iinclude -ffast-math
 ifndef DEBUG
-CFLAGS += -O2 -DNDEBUG
+CFLAGS += -O0 -D_DEBUG
 endif
 CXXFLAGS += $(CFLAGS)
 #DRC_DBG = 1
@@ -31,10 +31,8 @@ OBJS += libpcsxcore/cdriso.o libpcsxcore/cdrom.o libpcsxcore/cheat.o \
 	libpcsxcore/psxhw.o libpcsxcore/psxinterpreter.o libpcsxcore/psxmem.o libpcsxcore/r3000a.o \
 	libpcsxcore/sio.o libpcsxcore/socket.o libpcsxcore/spu.o
 
-ifeq "$(DEBUG)" "1"
-OBJS += libpcsxcore/disr3000a.o \
-		  libpcsxcore/debug.o 
-endif
+OBJS += libpcsxcore/disr3000a.o
+OBJS += libpcsxcore/debug.o 
 
 ifeq "$(NEW_GTE)" "1"
 OBJS += libpcsxcore/gte.o
@@ -132,9 +130,15 @@ OBJS += icystdlib/src/msw-printf-stdout.o
 OBJS += icystdlib/src/posix_file.o
 OBJS += icystdlib/src/StringUtil.o
 
+OBJS += libpsdisc/src/psdisc-filesystem-ecma-119.o
+OBJS += libpsdisc/src/psdisc-cdvd-image.o
 
-icystdlib/%.o : 
-    CXXFLAGS += -Iicystdlib/inc -lstdc++fs -std=c++17
+OBJS += libpcsxcore/psxhle-filesystem.o
+
+
+icystdlib/%.o libpsdisc/%.o : 
+    CXXFLAGS += -lstdc++fs -std=c++17
+    CXXFLAGS += -Iicystdlib/inc
     CXXFLAGS += -Iicystdlib/icy-app-glue
     CXXFLAGS += -Ilibpsdisc/inc
     CXXFLAGS += --include=fi-platform-defines.h

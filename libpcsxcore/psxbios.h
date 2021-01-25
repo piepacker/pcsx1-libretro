@@ -34,7 +34,9 @@ extern const char * const biosA0n[256];
 extern const char * const biosB0n[256];
 extern const char * const biosC0n[256];
 
+void psxBiosInit_StdLib();
 void psxBiosInitFull();
+void psxBiosLoadExecCdrom();
 void psxBiosShutdown();
 void psxBiosException80();
 void psxBiosFreeze(int Mode);

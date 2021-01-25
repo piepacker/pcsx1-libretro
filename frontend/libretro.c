@@ -872,10 +872,12 @@ bool retro_load_game(const struct retro_game_info *info)
 
 	SysReset();
 
-	if (LoadCdrom() == -1) {
-		SysPrintf("could not load CD-ROM!\n");
-		return false;
-	}
+	psxBiosLoadExecCdrom();
+
+	//if (LoadCdrom() == -1) {
+	//	SysPrintf("could not load CD-ROM!\n");
+	//	return false;
+	//}
 	emu_on_new_cd(0);
 
 	// multidisk images

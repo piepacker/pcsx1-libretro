@@ -37,7 +37,9 @@ static u32 branchPC;
 
 // These macros are used to assemble the repassembler functions
 
-#ifdef PSXCPU_LOG
+//#define PSXCPU_LOG printf
+
+#if defined(PSXCPU_LOG)
 #define debugI() PSXCPU_LOG("%s\n", disR3000AF(psxRegs.code, psxRegs.pc)); 
 #else
 #define debugI()
@@ -942,8 +944,8 @@ void execI()
 {
 	u32 *code = (u32 *)PSXM(psxRegs.pc);
 	psxRegs.code = ((code == NULL) ? 0 : SWAP32(*code));
-#ifdef DEBUG
 	debugI();
+#ifdef DEBUG
 	if (Config.Debug) ProcessDebug();
 #endif
 

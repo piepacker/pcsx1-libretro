@@ -35,6 +35,12 @@
 #include "psxhle-filesystem.h"
 #include "psdisc-types.h"
 #include "jfmt.h"
+
+
+#include "StringTokenizer.h"
+#include "StringUtil.h"
+#include "icy_assert.h"
+
 #include <zlib.h>
 
 #include <cstdint>
@@ -1733,9 +1739,10 @@ void psxBios_Exec() { // 43
     ra = 0x8000;
     pc0 = header->_pc;
 }
+
 #if HLE_ENABLE_LOADEXEC
 extern void         psxFs_CacheFilesystem();
-extern bool         psxFs_LoadExecutableHeader(const char* path, EXE_HEADER& dest);
+extern bool         psxFs_LoadExecutableHeader(const char* path, PSX_EXE_HEADER& dest);
 extern psdisc_sec_t psxFs_GetFileSector(const char* path);
 extern intmax_t     psxFs_GetFileSize(const char* path);
 extern bool         psxFs_ReadSectorData2048(void* dest,  psdisc_sec_t sector, int nSectors=1);
@@ -1749,7 +1756,7 @@ void psxBios_Load() { // 0x42
         uint8_t buf[2048];
         psxFs_ReadSectorData2048(buf, sector);
         memcpy(Ra0, buf, 76);
-        EXEC_DESCRIPTOR tdesc = *(EXEC_DESCRIPTOR*)(Ra0 + sizeof(EXE_HEADER));
+        EXEC_DESCRIPTOR tdesc = *(EXEC_DESCRIPTOR*)(Ra0 + sizeof(PSX_EXE_HEADER));
 
         if (auto* pa1 = (EXEC_DESCRIPTOR*)Ra1) {
             *pa1 = tdesc;
@@ -3689,9 +3696,6 @@ void psxBiosInitFull() {
 void psxBiosShutdown() {
 }
 
-#include "StringTokenizer.h"
-#include "StringUtil.h"
-
 
 const char* uri_find_domain_colon(const char* src) {
     // tricky: colon is technically a legal filename character if it occurs after a forward slash.
@@ -3723,7 +3727,7 @@ void psxBiosLoadExecCdrom() {
                         exepath = rvalue;
                     }
                     else {
-                        printf("[ERROR]: SYSTEM.CNF is invalid: BOOT lvalue does not have a valid rvalue.\n");
+                        printf("[ERROR]: SYSTEM.CNF: BOOT lvalue does not have a valid rvalue.\n");
                     }
 
                     // this shouldn't really ever happen so let's assert by default in debug builds.
@@ -3819,7 +3823,7 @@ void psxBiosLoadExecCdrom() {
 
         psxFs_ReadSectorData2048(buf, sector);
         memcpy(Ra0, buf, 76);
-        EXEC_DESCRIPTOR tdesc = *(EXEC_DESCRIPTOR*)(Ra0 + sizeof(EXE_HEADER));
+        EXEC_DESCRIPTOR tdesc = *(EXEC_DESCRIPTOR*)(Ra0 + sizeof(PSX_EXE_HEADER));
 
         if (auto* pa1 = (EXEC_DESCRIPTOR*)Ra1) {
             *pa1 = tdesc;
@@ -3833,11 +3837,14 @@ void psxBiosLoadExecCdrom() {
         intmax_t text_addr = tdesc.t_addr & 0x1fffffff;
         intmax_t text_size = tdesc.t_size;
         auto* ramdest = PSXM(text_addr);
+        printf("(hlebios) reading %jd (%08jX) bytes into addr %08jx (host @ %p)\n", JFMT(text_size), JFMT(text_size), text_addr, ramdest);
         if (psxFs_ReadSectorData2048(ramdest, sector+1, (text_size + 2047) / 2048) == 0) {
-            printf("It failed!\n");
-            assert(false);
+            dbg_abort("ReadSectorData failed!");
         }
 
+    	psxCpu->Clear(text_addr, text_size / 4);
+
+#if HLE_MEDNAFEN_IFC
         // DUMP! donotcheckin
         if (0) {
             auto* insnptr = (uint32_t*)ramdest;
@@ -3845,17 +3852,23 @@ void psxBiosLoadExecCdrom() {
                 printf( "[MIPS] %06jx:%08jx %s\n", JFMT(text_addr) + i, JFMT((uint32_t&)ramdest[i]), DisassembleMIPS(text_addr + i, (uint32_t&)ramdest[i]).c_str());
             }
         }
+#endif
 
         pc0 = tdesc._pc;
         gp  = tdesc._gp;
         sp  = tdesc.s_addr ? tdesc.s_addr : 0x801fff00;
 
+        printf("(hlebios) pc0   = %08X\n", pc0);
+        printf("(hlebios) gp    = %08X\n", gp);
+        printf("(hlebios) sp    = %08X\n", sp);
 
         CP0_STATUS &= ~(1ull << 22);	// BEV  (bootstrap)
         CP0_STATUS |=  (7ull << 28);   // enable COP0,1,2
         assert((CP0_STATUS & (1<<31)) == 0);
 
+#if HLE_MEDNAFEN_IFC
         PSX_CPU->BACKED_new_PC = PSX_CPU->BACKED_PC + 4;
+#endif
     }
     else {
         printf("[ERROR]: Failed to load boot executable: %s\n", exedata);
