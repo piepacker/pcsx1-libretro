@@ -41,8 +41,6 @@
 #include "StringUtil.h"
 #include "icy_assert.h"
 
-#include <zlib.h>
-
 #include <cstdint>
 #include <cstdio>
 #include <string>
@@ -51,6 +49,14 @@
 #define HLE_MEDNAFEN_IFC    0
 #define HLE_PCSX_IFC        1
 #define HLE_DUCKSTATION_IFC 0
+
+#if !defined(HAS_ZLIB)
+#   define HAS_ZLIB         1
+#endif
+
+#if HAS_ZLIB
+#   include <zlib.h>
+#endif
 
 #if HLE_PCSX_IFC
 #   include "psxhw.h"
@@ -285,8 +291,10 @@ const char * const biosC0n[256] = {
 #if HLE_PCSX_IFC
 extern char McdDisable[2];
 
-#define PSX_RAM_START (psxM)
-#define PSX_ROM_START (psxR)
+#define PSX_RAM_START ((u8*)psxM)
+#define PSX_ROM_START ((u8*)psxR)
+#define PSX_SPR_START ((u8*)psxH)
+
 #define GPR_ARRAY (psxRegs.GPR.r)
 #define pc0 (psxRegs.pc)
 #define lo  (psxRegs.GPR.n.lo)
@@ -307,6 +315,10 @@ static void Write_ISTAT(u32 val) { psxHwWrite32(0x1f801070, val); }
 static void Write_IMASK(u32 val) { psxHwWrite32(0x1f801074, val); }
 static u32 Read_ISTAT() { return psxHu32(0x1070); }
 static u32 Read_IMASK() { return psxHu32(0x1074); }
+
+static void SetPC(uint32_t newpc) {
+    psxRegs.pc = newpc;
+}
 #endif
 
 #if HLE_MEDNAFEN_IFC
@@ -431,14 +443,14 @@ static const uint32_t PS1_BiosRomEnd		= 0x1fc00000 + PS1_BIOSSIZE;
 
 #if HLE_PCSX_IFC
 void VmcWriteNV(int port, int slot, const void* src, int size) {
-    assert((u32)port < 2);
+    dbg_check((u32)port < 2);
     auto* dest = port ? Mcd2Data : Mcd1Data;
     memcpy(dest + a1 * 128, (uint8_t*)src, 128);
     SaveMcd(port ? Config.Mcd2 : Config.Mcd1, dest, a1 * 128, 128);
 }
 
 bool VmcEnabled(int port, int slot) {
-    assert((u32)port < 2);
+    dbg_check((u32)port < 2);
     return !McdDisable[port];
 }
 #endif
@@ -447,19 +459,19 @@ bool VmcEnabled(int port, int slot) {
 #include "mednafen/psx/frontio.h"
 extern FrontIO *PSX_FIO;        // defined by libretro. dunno why this isn't baked into the PSX core for mednafen. --jstine
 void VmcWriteNV(int port, int slot, const void* src, int offset, int size) {
-    assert((u32)port < 2);
+    dbg_check((u32)port < 2);
     if (auto mcd = PSX_FIO->GetMemcardDevice(port))
         mcd->WriteNV((const uint8_t*)src, offset, size);
 }
 
 void VmcReadNV(int port, int slot, void* dest, int offset, int size) {
-    assert((u32)port < 2);
+    dbg_check((u32)port < 2);
     if (auto mcd = PSX_FIO->GetMemcardDevice(port))
         mcd->ReadNV((uint8_t*)dest, offset, size);
 }
 
 bool VmcEnabled(int port, int slot) {
-    assert((u32)port < 2);
+    dbg_check((u32)port < 2);
     if (auto mcd = PSX_FIO->GetMemcardDevice(port)) {
         return 1;
     }
@@ -468,29 +480,49 @@ bool VmcEnabled(int port, int slot) {
 }
 #endif
 
-#if HLE_MEDNAFEN_IFC
+#if HLE_DUCKSTATION_IFC && HLE_ENABLE_MCD
+void VmcWriteNV(int port, int slot, const void* src, int offset, int size) {
+    dbg_check((u32)port < 2);
+}
+
+void VmcReadNV(int port, int slot, void* dest, int offset, int size) {
+    dbg_check((u32)port < 2);
+}
+
+bool VmcEnabled(int port, int slot) {
+    dbg_check((u32)port < 2);
+    return 0;
+}
+#endif
+
+#if HLE_PCSX_IFC
+// to help verify the behavior of these implementations on PCSX, undef the macros and re-implement using
+// cross-platform versions. This also makes it easy to disable this on PCSX and test this specific code for regressions.
+#   undef PSXM
+#   undef psxMu32ref
+#   undef psxMu32
+#endif
+
 static u8* PSXM(u32 unmasked) {
     auto masked = unmasked & 0x1fff'ffff;
 
-    u8* mem_ = MainRAM->data8;
-
     if (masked < PS1_RamMirrorSize) {
-        return MainRAM->data8 + (masked & (PS1_RamPhysicalSize - 1));
+        return PSX_RAM_START + (masked & (PS1_RamPhysicalSize - 1));
     }
     else if (masked >= 0x1f800000 && masked < (0x1f800000 + PS1_FASTRAMSIZE)) {
-        return ScratchRAM->data8 + (masked-0x1f800000);
+        return PSX_SPR_START + (masked-0x1f800000);
     }
     else if (masked >= 0x1fc00000 && masked < (0x1fc00000 + PS1_BIOSSIZE)) {
-        return BIOSROM->data8 + (masked-0x1fc00000);
+        return PSX_RAM_START + (masked-0x1fc00000);
     }
     else {
-        assert(false);
+        dbg_check(false);
     }
     //else if (auto* entry = ioHandlers_[HASH_IOADDR(addr)]) {
     //	return entry->ioRead32(addr);
     //}
 
-    return MainRAM->data8 + masked;
+    return PSX_RAM_START + masked;
 }
 
 static u32& psxMu32ref(u32 addr) {
@@ -500,7 +532,6 @@ static u32& psxMu32ref(u32 addr) {
 static u32 psxMu32(u32 addr) {
     return *(u32*)PSXM(addr);
 }
-#endif
 
 #define Ra0 ((char *)PSXM(a0))
 #define Ra1 ((char *)PSXM(a1))
@@ -697,7 +728,7 @@ static bool HleYieldCheck(SoftCallReturnId id) {
 
 #if HLE_ENABLE_EVENT
 static void HLEcb_DeliverEvent_Resume() {
-    assert (HleYieldCheck(SCRI_DeliverEvent_Resume));
+    dbg_check (HleYieldCheck(SCRI_DeliverEvent_Resume));
     softCallResume();
     pc0 = ra;
 }
@@ -924,10 +955,10 @@ void psxBios_strcmp() { // 0x17
         }
     }
 
-    v0 = (*p1 - *--p2);
-    v1 = n;
-    a0+=n;
-    a1+=n;
+    v0  = (*p1 - *--p2);
+    v1  = n;
+    a0 += n;
+    a1 += n;
     pc0 = ra;
 }
 
@@ -1874,6 +1905,14 @@ void psxBios_FlushCache() { // 44
 #define DMA_R(addr)         DMA_Read (0, addr)
 #endif
 
+#if HLE_DUCKSTATION_IFC
+#define GPU_W_DATA(dat)     (g_gpu->WriteRegister(0, dat))
+#define GPU_W_STATUS(dat)   (g_gpu->WriteRegister(4, dat))
+#define GPU_R_STATUS()      (g_gpu->ReadRegister (4))
+#define DMA_W(addr, val)    (g_dma.WriteRegister((addr) & Bus::DMA_MASK, val))
+#define DMA_R(addr)         (g_dma.ReadRegister ((addr) & Bus::DMA_MASK))
+#endif
+
 #if HLE_ENABLE_GPU
 void psxBios_GPU_dw() { // 0x46
     int size;
@@ -1999,7 +2038,7 @@ void psxBios__bu_init() { // 70
         pc0 = ra;
     }
     else {
-        assert(false);
+        dbg_check(false);
     }
 #else
     DeliverEvent(0x11, 0x2); // 0xf0000011, 0x0004
@@ -2355,7 +2394,7 @@ void psxBios_CloseTh() { // 0f
 
     PSXBIOS_LOG("psxBios_%s: %x\n", biosB0n[0x0f], th);
 
-    assert((u32)th < 8);
+    dbg_check((u32)th < 8);
 
     /* The return value is always 1 (even if the handle was already closed). */
     v0 = 1;
@@ -2374,7 +2413,7 @@ void psxBios_ChangeTh() { // 10
     int th = a0 & 0xff;
     PSXBIOS_LOG("psxBios_%s: %x\n", biosB0n[0x10], th);
 
-    assert((u32)th < 8);
+    dbg_check((u32)th < 8);
 
     /* The return value is always 1. */
     v0 = 1;
@@ -2464,7 +2503,7 @@ static unsigned interrupt_r26 = 0x8004E8B0;
 static bool s_saved = 0;
 
 static inline void SaveRegs() {
-    assert(!s_saved);
+    dbg_check(!s_saved);
     s_saved = 1;
     memcpy(regs, GPR_ARRAY, sizeof(GPR_ARRAY));
 #if HLE_MEDNAFEN_IFC
@@ -2548,6 +2587,7 @@ void psxBios_UnDeliverEvent() { // 0x20
     else v0 = length; \
     FDesc[1 + mcd].offset += v0; \
 }
+
 #define buwrite(Ra1, mcd, length) { \
     u32 offset =  + 8192 * FDesc[1 + mcd].mcfile + FDesc[1 + mcd].offset; \
     SysPrintf("write %d: %x,%x\n", FDesc[1 + mcd].mcfile, FDesc[1 + mcd].offset, a2); \
@@ -2562,8 +2602,8 @@ void psxBios_UnDeliverEvent() { // 0x20
     else v0 = length; \
 }
 #else
-#define buread(Ra1, mcd, length)   (assert(false))
-#define buwrite(Ra1, mcd, length)  (assert(false))
+#define buread(Ra1, mcd, length)   (dbg_check(false))
+#define buwrite(Ra1, mcd, length)  (dbg_check(false))
 #endif
 
 char ffile[64], *pfile;
@@ -2805,7 +2845,6 @@ void psxBios_close() { // 0x36
     v0 = a0;
     pc0 = ra;
 }
-
 
 /* To avoid any issues with different behaviour when using the libc's own strlen instead.
  * We want to mimic the PSX's behaviour in this case for bufile. */
@@ -3212,10 +3251,6 @@ void psxBios_SysDeqIntRP() { // 03
     v0 = 0; pc0 = ra;
 }
 #endif
-void psxBios_dummy() {
-    PSXBIOS_LOG("unk %x call: %x\n", pc0 & 0x1fffff, t1);
-    pc0 = ra;
-}
 
 using VoidFnptr = void (*)();
 
@@ -3322,13 +3357,13 @@ void psxBiosInit_StdLib() {
 
 #if HLE_ENABLE_HEAP
     if (hle_config_env_heap()) {
-    biosA0[0x33] = psxBios_malloc;
-    biosA0[0x34] = psxBios_free;
-    //biosA0[0x35] = psxBios_lsearch;
-    //biosA0[0x36] = psxBios_bsearch;
-    biosA0[0x37] = psxBios_calloc;
-    biosA0[0x38] = psxBios_realloc;
-    biosA0[0x39] = psxBios_InitHeap;
+        biosA0[0x33] = psxBios_malloc;
+        biosA0[0x34] = psxBios_free;
+        //biosA0[0x35] = psxBios_lsearch;
+        //biosA0[0x36] = psxBios_bsearch;
+        biosA0[0x37] = psxBios_calloc;
+        biosA0[0x38] = psxBios_realloc;
+        biosA0[0x39] = psxBios_InitHeap;
     }
 #endif
 
@@ -3647,10 +3682,10 @@ void psxBiosInitFull() {
     //biosC0[0x1c] = psxBios_PatchAOTable;
 //************** THE END ***************************************
 /**/
+
 #if HLE_ENABLE_EVENT
     u32 base;
     int size;
-    uLongf len;
 
     base = 0x1000;
     size = sizeof(EvCB) * 32;
@@ -3749,12 +3784,14 @@ void psxBiosInitFull() {
         // initial RNG seed
         psxMu32ref(0x9010) = SWAPu32(0xac20cc00);
 
+#if HAS_ZLIB
         // fonts
         uLongf len;
         len = 0x80000 - 0x66000;
         uncompress((Bytef *)(PSX_ROM_START + 0x66000), &len, font_8140, sizeof(font_8140));
         len = 0x80000 - 0x69d68;
         uncompress((Bytef *)(PSX_ROM_START + 0x69d68), &len, font_889f, sizeof(font_889f));
+#endif
 
         // memory size 2 MB
         // (mednafen doesn't seem to bother to set this...)
@@ -3819,7 +3856,7 @@ void psxBiosLoadExecCdrom() {
 
                     // this shouldn't really ever happen so let's assert by default in debug builds.
                     // probably it's a bug in the parsing logic here, rather than user error.
-                    assert(rvalue);
+                    dbg_check(rvalue);
                 }
             }
         }
@@ -3877,7 +3914,7 @@ void psxBiosLoadExecCdrom() {
         if (s[1] != '/' && s[1] != '\\') return s+1;
         if (s[2] != '/' && s[2] != '\\') return s+2;
 
-        assert(s[3] != '/' && s[3] != '\\');
+        dbg_check(s[3] != '/' && s[3] != '\\');
         return s+3;
     };
 
@@ -3929,7 +3966,8 @@ void psxBiosLoadExecCdrom() {
             dbg_abort("ReadSectorData failed!");
         }
 
-    	psxCpu->Clear(text_addr, text_size / 4);
+        // donotcheckin - develop API layer for this.
+        psxCpu->Clear(text_addr, text_size / 4);
 
 #if HLE_MEDNAFEN_IFC
         // DUMP! donotcheckin
@@ -3941,7 +3979,7 @@ void psxBiosLoadExecCdrom() {
         }
 #endif
 
-        pc0 = tdesc._pc;
+        SetPC(tdesc._pc);
         gp  = tdesc._gp;
         sp  = tdesc.s_addr ? tdesc.s_addr : 0x801fff00;
 
@@ -3951,11 +3989,7 @@ void psxBiosLoadExecCdrom() {
 
         CP0_STATUS &= ~(1ull << 22);	// BEV  (bootstrap)
         CP0_STATUS |=  (7ull << 28);   // enable COP0,1,2
-        assert((CP0_STATUS & (1<<31)) == 0);
-
-#if HLE_MEDNAFEN_IFC
-        PSX_CPU->BACKED_new_PC = PSX_CPU->BACKED_PC + 4;
-#endif
+        dbg_check((CP0_STATUS & (1<<31)) == 0);
     }
     else {
         printf("[ERROR]: Failed to load boot executable: %s\n", exedata);
@@ -3972,7 +4006,7 @@ void psxBiosLoadExecCdrom() {
         bufcount = (pad_buf##pad[1] & 0x0f) * 2; \
     } \
     PAD##pad##_poll(0); \
-    int i = 2; \
+    i = 2; \
     while (bufcount--) { \
         pad_buf##pad[i++] = PAD##pad##_poll(0); \
     } \
@@ -3980,7 +4014,7 @@ void psxBiosLoadExecCdrom() {
 
 #if HLE_ENABLE_EXCEPTION
 void biosInterrupt() {
-    int bufcount;
+    int i, bufcount;
 
     // Looks like this is polling the pads on every interrupt, which is definitely
     // not what we want. Will have to dig into it later and see if I can figure out why
@@ -4100,7 +4134,7 @@ void psxBiosException80() {
 
             if (jmp_int) {
                 uint32_t* jmpptr = (uint32_t*)PSXM(jmp_int);
-                int jmp_addr = (s8*)jmpptr - PSX_RAM_START;
+                int jmp_addr = (u8*)jmpptr - PSX_RAM_START;
                 //PSXBIOS_LOG("jmp_int @ %08x - ra=%08x sp=%08x fp=%08x\n", jmp_addr, jmpptr[0], jmpptr[1], jmpptr[2]);
                 Write_ISTAT(0xffffffff);
 
