@@ -140,7 +140,7 @@ static bool hle_config_env_heap     () { return hle_config_get_bool("HEAP"      
 static bool hle_config_env_event    () { return hle_config_get_bool("EVENT"     ); }
 static bool hle_config_env_full     () { return hle_config_get_bool("FULL"      ); }
 #undef SysPrintf
-#define SysPrintf(...)   (printf(__VA_ARGS__), fflush(NULL))
+#define SysPrintf(fmt, ...) (printf(fmt, ##__VA_ARGS__), fflush(stdout))
 
 const char * const biosA0n[256] = {
 // 0x00
@@ -665,6 +665,7 @@ static SoftCallReturnId DeliverEventYield(u32 ev, u32 spec) {
 }
 #endif
 
+#if HLE_PCSX_IFC
 static inline void softCall(u32 pc) {
     pc0 = pc;
     ra = 0x80001000;
@@ -697,6 +698,7 @@ static inline void DeliverEvent(u32 ev, u32 spec) {
         softCall2(EventCB[ev][spec].fhandler);
     } else EventCB[ev][spec].status = EvStALREADY;
 }
+#endif
 
 void psxBios_todigit(void) // 0x0a
 {
@@ -1914,14 +1916,48 @@ void psxBios_get_cd_status(void) //a6
     pc0 = ra;
 }
 
+#if HLE_ENABLE_EVENT
 void psxBios__bu_init() { // 70
     PSXBIOS_LOG("psxBios_%s\n", biosA0n[0x70]);
 
+#if HLE_ENABLE_YIELD
+    // Impl Note: honestly this would be easier rewritten as MIPS assembly.
+    //   It's just two JALs, but in order to maintain stack-engine state info at the HLE 
+    //   level, we need to implement a ton of paperwork that the interpreter would simply
+    //   handle for us via its own MIPS state machine. --jstine
+
+    if (HleYieldCheck(SCRI_None)) {
+        HleCallYield(SCRI_psxBios__bu_init_00);
+        if (DeliverEventYield(0x11, 0x2)) { // 0xf0000011, 0x0004
+            return;
+        }
+        pc0 = ra;       // allows fallthrough to next HleYield state
+    }
+
+    if (HleYieldCheck(SCRI_psxBios__bu_init_00)) {
+        HleCallResume();
+        HleCallYield(SCRI_psxBios__bu_init_01);
+        if (DeliverEventYield(0x81, 0x2)) { // 0xf4000001, 0x0004
+            return;
+        }
+        pc0 = ra;
+    }
+
+    if (HleYieldCheck(SCRI_psxBios__bu_init_01)) {
+        HleCallResume();
+        pc0 = ra;
+    }
+    else {
+        assert(false);
+    }
+#else
     DeliverEvent(0x11, 0x2); // 0xf0000011, 0x0004
     DeliverEvent(0x81, 0x2); // 0xf4000001, 0x0004
 
     pc0 = ra;
+#endif
 }
+#endif
 
 void psxBios__96_init() { // 71
     PSXBIOS_LOG("psxBios_%s\n", biosA0n[0x71]);
