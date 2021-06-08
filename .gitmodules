@@ -4,3 +4,12 @@
 [submodule "warm"]
 	path = frontend/warm
 	url = git://notaz.gp2x.de/~notaz/warm.git
+[submodule "ext/libpsdisc"]
+	path = ext/libpsdisc
+	url = https://github.com/piepacker/libpsdisc
+[submodule "ext/psxhlebios"]
+	path = ext/psxhlebios
+	url = https://github.com/piepacker/psxhlebios
+[submodule "ext/icystdlib"]
+	path = ext/icystdlib
+	url = https://github.com/jstine35/icystdlib
