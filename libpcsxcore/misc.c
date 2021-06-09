@@ -244,6 +244,8 @@ int LoadCdrom() {
 
 	psxCpu->Clear(tmpHead.t_addr, tmpHead.t_size / 4);
 
+	printf("(misc) reading %jd (%08jX) bytes into addr %08jx (host @ %p)\n", (intmax_t)tmpHead.t_size, (intmax_t)tmpHead.t_size, tmpHead.t_addr, PSXM(tmpHead.t_addr));
+
 	// Read the rest of the main executable
 	while (tmpHead.t_size & ~2047) {
 		void *ptr = (void *)PSXM(tmpHead.t_addr);

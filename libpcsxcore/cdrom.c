@@ -24,6 +24,7 @@
 #include "cdrom.h"
 #include "ppf.h"
 #include "psxdma.h"
+#include "misc.h"
 
 /* logging */
 #if 0

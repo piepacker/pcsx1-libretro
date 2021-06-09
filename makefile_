@@ -7,7 +7,6 @@ CFLAGS += -Wall -ggdb -Iinclude -ffast-math
 ifneq ($(DEBUG), 1)
 CFLAGS += -O2 -DNDEBUG
 endif
-CXXFLAGS += $(CFLAGS)
 #DRC_DBG = 1
 #PCNT = 1
 
@@ -40,9 +39,9 @@ OBJS += libpcsxcore/disr3000a.o \
 endif
 
 ifneq ($(USE_EXT_HLEBIOS),1)
+CFLAGS += -DUSE_EXT_HLEBIOS=1
 OBJS += libpcsxcore/psxbios.o
 OBJS += libpcsxcore/psxhle.o
-
 libpcsxcore/psxbios.o: CFLAGS += -Wno-nonnull
 endif
 
@@ -134,7 +133,6 @@ OBJS += frontend/main.o frontend/plugin.o
 
 ifeq ($(USE_EXT_HLEBIOS),1)
 CFLAGS   += -DUSE_EXT_HLEBIOS=1
-CXXFLAGS += -DUSE_EXT_HLEBIOS=1
 OBJS += ext/icystdlib/src/filesystem.msw.o
 OBJS += ext/icystdlib/src/fs.o
 OBJS += ext/icystdlib/src/logger_local_buffer.o
@@ -153,16 +151,16 @@ OBJS += ext/psxhlebios/src/psxhle.o
 #psxhle/psxbios.o: CFLAGS += -Wno-nonnull
 ext/icystdlib/%.o ext/libpsdisc/%.o ext/psxhle/%.o: 
     CXXFLAGS += -lstdc++fs -std=c++17
-    CXXFLAGS += -Iext/icystdlib/inc
-    CXXFLAGS += -Iext/icystdlib/icy-app-glue
-    CXXFLAGS += -Iext/libpsdisc/inc
-    CXXFLAGS += -Iext/psxhlebios
-    CXXFLAGS += -Ilibpcsxcore
-    CXXFLAGS += --include=fi-platform-defines.h
-    CXXFLAGS += --include=ext/icystdlib/fi-projdir-BuildConfig.h
-    CXXFLAGS += -DHLE_MEDNAFEN_IFC=0
-    CXXFLAGS += -DHLE_PCSX_IFC=1
-    CXXFLAGS += -DHLE_DUCKSTATION_IFC=0
+    CFLAGS += -Iext/icystdlib/inc
+    CFLAGS += -Iext/icystdlib/icy-app-glue
+    CFLAGS += -Iext/libpsdisc/inc
+    CFLAGS += -Iext/psxhlebios
+    CFLAGS += -Ilibpcsxcore
+    CFLAGS += --include=fi-platform-defines.h
+    CFLAGS += --include=ext/icystdlib/fi-projdir-BuildConfig.h
+    CFLAGS += -DHLE_PCSX_IFC=1
+    #CFLAGS += -DHLE_MEDNAFEN_IFC=0
+    #CFLAGS += -DHLE_DUCKSTATION_IFC=0
 
 ext/libpcsxcore/%.o:
     CFLAGS += -Iext/psxhlebios/src
@@ -170,6 +168,9 @@ endif
 
 frontend/menu.o frontend/main.o: frontend/revision.h
 frontend/plat_sdl.o frontend/libretro.o: frontend/revision.h
+
+CFLAGS += -Wno-unused-value
+CXXFLAGS += $(CFLAGS)
 
 libpcsxcore/new_dynarec/gte_nf.o: libpcsxcore/new_dynarec/gte.c
 	$(CC) -c -o $@ $^ $(CFLAGS) -DFLAGLESS

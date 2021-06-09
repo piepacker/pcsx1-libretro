@@ -30,6 +30,8 @@
 #include "new_dynarec/gte.h"
 #endif
 
+#include "psxbios.h"
+
 R3000Acpu *psxCpu = NULL;
 psxRegisters psxRegs;
 

@@ -20,17 +20,20 @@
 #ifndef __PSXHLE_H__
 #define __PSXHLE_H__
 
+#if USE_EXT_HLEBIOS
+#   include <libpsxhle.h>
+#else
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#include "psxcommon.h"
-#include "r3000a.h"
-#include "plugins.h"
-
 extern void (*psxHLEt[256])();
 
 #ifdef __cplusplus
-}
+};
 #endif
+
+#endif
+
 #endif

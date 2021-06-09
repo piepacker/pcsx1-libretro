@@ -21,6 +21,7 @@
 #include "psxmem.h"
 
 #include "cheat.h"
+#include "misc.h"
 
 Cheat *Cheats = NULL;
 int NumCheats = 0;

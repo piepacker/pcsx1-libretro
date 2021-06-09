@@ -80,7 +80,7 @@ retry:
 			// try to use similarly aligned memory instead
 			// (recompiler needs this)
 			mask = (addr - 1) & ~addr & 0x07ffffff;
-			addr = (unsigned long)(ret + mask) & ~mask;
+			addr = ((unsigned long)ret + mask) & ~mask;
 			tried_to_align = 1;
 			goto retry;
 		}

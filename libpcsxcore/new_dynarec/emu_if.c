@@ -9,7 +9,7 @@
 
 #include "emu_if.h"
 #include "pcsxmem.h"
-#include "../psxhle.h"
+#include "psxhle.h"
 #include "../r3000a.h"
 #include "../cdrom.h"
 #include "../psxdma.h"
