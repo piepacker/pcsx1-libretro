@@ -116,7 +116,15 @@ void psxException(u32 code, u32 bd) {
 	psxRegs.CP0.n.Status = (psxRegs.CP0.n.Status &~0x3f) |
 						  ((psxRegs.CP0.n.Status & 0xf) << 2);
 
-	if (Config.HLE) psxBiosException();
+	if (Config.HLE) {
+		if (psxRegs.pc == 0x80) {
+			psxBiosException80();
+		}
+		else {
+			// unsupported for now.
+			assert(0);
+		}
+	}
 }
 
 void psxBranchTest() {

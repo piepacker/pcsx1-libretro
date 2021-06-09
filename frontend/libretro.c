@@ -548,12 +548,7 @@ static struct retro_disk_control_callback disk_control = {
 	.add_image_index = disk_add_image_index,
 };
 
-// just in case, maybe a win-rt port in the future?
-#ifdef _WIN32
-#define SLASH '\\'
-#else
 #define SLASH '/'
-#endif
 
 static char base_dir[PATH_MAX];
 
@@ -877,10 +872,15 @@ bool retro_load_game(const struct retro_game_info *info)
 
 	SysReset();
 
+#if USE_EXT_HLEBIOS
+	psxBiosLoadExecCdrom();
+#else
 	if (LoadCdrom() == -1) {
 		SysPrintf("could not load CD-ROM!\n");
 		return false;
 	}
+#endif
+
 	emu_on_new_cd(0);
 
 	// multidisk images

@@ -2797,7 +2797,7 @@ void biosInterrupt() {
 	}
 }
 
-void psxBiosException() {
+void psxBiosException80() {
 	int i;
 
 	switch (psxRegs.CP0.n.Cause & 0x3c) {

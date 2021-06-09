@@ -3,12 +3,15 @@
 # default stuff goes here, so that config can override
 TARGET ?= pcsx
 CFLAGS += -Wall -ggdb -Iinclude -ffast-math
-ifndef DEBUG
+
+ifneq ($(DEBUG), 1)
 CFLAGS += -O2 -DNDEBUG
 endif
 CXXFLAGS += $(CFLAGS)
 #DRC_DBG = 1
 #PCNT = 1
+
+USE_EXT_HLEBIOS ?= 1
 
 all: target_ plugins_
 
@@ -16,7 +19,7 @@ all: target_ plugins_
 
 CC_LINK ?= $(CC)
 CC_AS ?= $(CC)
-LDFLAGS += $(MAIN_LDFLAGS)
+LDFLAGS += $(MAIN_LDFLAGS) -lstdc++
 EXTRA_LDFLAGS ?= -Wl,-Map=$@.map
 LDLIBS += $(MAIN_LDLIBS)
 ifdef PCNT
@@ -26,14 +29,21 @@ endif
 # core
 OBJS += libpcsxcore/cdriso.o libpcsxcore/cdrom.o libpcsxcore/cheat.o \
 	libpcsxcore/decode_xa.o libpcsxcore/mdec.o \
-	libpcsxcore/misc.o libpcsxcore/plugins.o libpcsxcore/ppf.o libpcsxcore/psxbios.o \
-	libpcsxcore/psxcommon.o libpcsxcore/psxcounters.o libpcsxcore/psxdma.o libpcsxcore/psxhle.o \
+	libpcsxcore/misc.o libpcsxcore/plugins.o libpcsxcore/ppf.o \
+	libpcsxcore/psxcommon.o libpcsxcore/psxcounters.o libpcsxcore/psxdma.o \
 	libpcsxcore/psxhw.o libpcsxcore/psxinterpreter.o libpcsxcore/psxmem.o libpcsxcore/r3000a.o \
 	libpcsxcore/sio.o libpcsxcore/socket.o libpcsxcore/spu.o
 
-ifeq "$(DEBUG)" "1"
+ifeq ($(DEBUG), 1)
 OBJS += libpcsxcore/disr3000a.o \
-		  libpcsxcore/debug.o 
+		libpcsxcore/debug.o 
+endif
+
+ifneq ($(USE_EXT_HLEBIOS),1)
+OBJS += libpcsxcore/psxbios.o
+OBJS += libpcsxcore/psxhle.o
+
+libpcsxcore/psxbios.o: CFLAGS += -Wno-nonnull
 endif
 
 ifeq "$(NEW_GTE)" "1"
@@ -50,8 +60,6 @@ ifeq "$(HAVE_NEON)" "1"
 OBJS += libpcsxcore/new_dynarec/gte_neon.o
 endif
 endif
-
-libpcsxcore/psxbios.o: CFLAGS += -Wno-nonnull
 
 # dynarec
 ifeq "$(USE_DYNAREC)" "1"
@@ -124,6 +132,41 @@ endif
 # misc
 OBJS += frontend/main.o frontend/plugin.o
 
+ifeq ($(USE_EXT_HLEBIOS),1)
+CFLAGS   += -DUSE_EXT_HLEBIOS=1
+CXXFLAGS += -DUSE_EXT_HLEBIOS=1
+OBJS += ext/icystdlib/src/filesystem.msw.o
+OBJS += ext/icystdlib/src/fs.o
+OBJS += ext/icystdlib/src/logger_local_buffer.o
+OBJS += ext/icystdlib/src/msw_app_console_init.o
+OBJS += ext/icystdlib/src/msw-printf-stdout.o
+OBJS += ext/icystdlib/src/posix_file.o
+OBJS += ext/icystdlib/src/StringUtil.o
+
+OBJS += ext/libpsdisc/src/psdisc-filesystem-ecma-119.o
+OBJS += ext/libpsdisc/src/psdisc-cdvd-image.o
+
+OBJS += ext/psxhlebios/src/psxhle-filesystem.o
+OBJS += ext/psxhlebios/src/psxbios.o
+OBJS += ext/psxhlebios/src/psxhle.o
+
+#psxhle/psxbios.o: CFLAGS += -Wno-nonnull
+ext/icystdlib/%.o ext/libpsdisc/%.o ext/psxhle/%.o: 
+    CXXFLAGS += -lstdc++fs -std=c++17
+    CXXFLAGS += -Iext/icystdlib/inc
+    CXXFLAGS += -Iext/icystdlib/icy-app-glue
+    CXXFLAGS += -Iext/libpsdisc/inc
+    CXXFLAGS += -Iext/psxhlebios
+    CXXFLAGS += -Ilibpcsxcore
+    CXXFLAGS += --include=fi-platform-defines.h
+    CXXFLAGS += --include=ext/icystdlib/fi-projdir-BuildConfig.h
+    CXXFLAGS += -DHLE_MEDNAFEN_IFC=0
+    CXXFLAGS += -DHLE_PCSX_IFC=1
+    CXXFLAGS += -DHLE_DUCKSTATION_IFC=0
+
+ext/libpcsxcore/%.o:
+    CFLAGS += -Iext/psxhlebios/src
+endif
 
 frontend/menu.o frontend/main.o: frontend/revision.h
 frontend/plat_sdl.o frontend/libretro.o: frontend/revision.h
