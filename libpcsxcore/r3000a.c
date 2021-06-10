@@ -124,7 +124,8 @@ void psxException(u32 code, u32 bd) {
 		}
 		else {
 			// unsupported for now.
-			assert(0);
+			psxBiosException80();
+			//assert(0);
 		}
 	}
 }

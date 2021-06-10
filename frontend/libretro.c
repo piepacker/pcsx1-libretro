@@ -28,6 +28,11 @@
 #include "revision.h"
 #include "libretro.h"
 
+
+#if USE_EXT_HLEBIOS
+#	include "libpsxbios.h"
+#endif
+
 static retro_video_refresh_t video_cb;
 static retro_input_poll_t input_poll_cb;
 static retro_input_state_t input_state_cb;
@@ -1166,6 +1171,8 @@ void retro_run(void)
 
 static bool try_use_bios(const char *path)
 {
+	return false;
+
 	FILE *f;
 	long size;
 	const char *name;
