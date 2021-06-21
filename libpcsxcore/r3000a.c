@@ -229,23 +229,36 @@ void psxJumpTest() {
 				if (call != 0x28 && call != 0xe)
 					PSXBIOS_LOG("Bios call a0: %s (%x) %x,%x,%x,%x\n", biosA0n[call], call, psxRegs.GPR.n.a0, psxRegs.GPR.n.a1, psxRegs.GPR.n.a2, psxRegs.GPR.n.a3);
 #endif
+
+#if USE_EXT_HLEBIOS
+				psxbios_invoke_A0();
+#else
 				if (biosA0[call])
 					biosA0[call]();
+#endif
 				break;
 			case 0xb0:
 #ifdef PSXBIOS_LOG
 				if (call != 0x17 && call != 0xb)
 					PSXBIOS_LOG("Bios call b0: %s (%x) %x,%x,%x,%x\n", biosB0n[call], call, psxRegs.GPR.n.a0, psxRegs.GPR.n.a1, psxRegs.GPR.n.a2, psxRegs.GPR.n.a3);
 #endif
+#if USE_EXT_HLEBIOS
+				psxbios_invoke_B0();
+#else
 				if (biosB0[call])
 					biosB0[call]();
+#endif
 				break;
 			case 0xc0:
 #ifdef PSXBIOS_LOG
 				PSXBIOS_LOG("Bios call c0: %s (%x) %x,%x,%x,%x\n", biosC0n[call], call, psxRegs.GPR.n.a0, psxRegs.GPR.n.a1, psxRegs.GPR.n.a2, psxRegs.GPR.n.a3);
 #endif
+#if USE_EXT_HLEBIOS
+				psxbios_invoke_C0();
+#else
 				if (biosC0[call])
 					biosC0[call]();
+#endif
 				break;
 		}
 	}

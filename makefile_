@@ -147,6 +147,7 @@ OBJS += ext/libpsdisc/src/psdisc-cdvd-image.o
 OBJS += ext/psxhlebios/src/psxhle-filesystem.o
 OBJS += ext/psxhlebios/src/psxbios.o
 OBJS += ext/psxhlebios/src/psxhle.o
+OBJS += ext/psxhlebios/src/psxhle-yieldcall.o
 
 #psxhle/psxbios.o: CFLAGS += -Wno-nonnull
 ext/icystdlib/%.o ext/libpsdisc/%.o ext/psxhle/%.o: 
