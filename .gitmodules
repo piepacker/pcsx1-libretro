@@ -12,4 +12,4 @@
 	url = https://github.com/piepacker/psxhlebios
 [submodule "ext/icystdlib"]
 	path = ext/icystdlib
-	url = https://github.com/jstine35/icystdlib
+	url = https://github.com/piepacker/icystdlib
